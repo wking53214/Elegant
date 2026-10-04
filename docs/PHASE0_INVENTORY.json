@@ -1,0 +1,2283 @@
+[
+  {
+    "repository": "AC-HCCSE",
+    "branch": "main",
+    "HEAD": "7bb662889b5846058ecb8afda1ac49ce80327e05",
+    "n_files": 16,
+    "n_py": 9,
+    "n_tests": 1,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "ac-hccse"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Anti-Cog / Human-Centered Customer Service Engine - friction scoring, batch review directives, and interaction routing"
+      ],
+      [
+        "requires-python",
+        ">=3.10"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        9
+      ],
+      [
+        ".md",
+        3
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "CCC",
+    "branch": "main",
+    "HEAD": "9c327aa0925afa4efc6fa3137d6a6be62bb945c5",
+    "n_files": 53,
+    "n_py": 44,
+    "n_tests": 13,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "cognitive-continuity-constitution"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Executable Cognitive Continuity Constitution enforcement layer"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "target-version",
+        "py311"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        44
+      ],
+      [
+        ".md",
+        2
+      ],
+      [
+        ".txt",
+        2
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".json",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "Conservation_Kernel",
+    "branch": "main",
+    "HEAD": "036ff0835738c68e6d7e56c20f8c5792ae9dd0e3",
+    "n_files": 54,
+    "n_py": 36,
+    "n_tests": 20,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "conservation-kernel"
+      ],
+      [
+        "version",
+        "0.3.0"
+      ],
+      [
+        "description",
+        "Independently testable hostile baseline that checks whether machine-mediated transformations preserve protected epistemic and provenance distinctions"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        36
+      ],
+      [
+        ".md",
+        12
+      ],
+      [
+        ".json",
+        2
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "DGK",
+    "branch": "main",
+    "HEAD": "c6b5297ede39f4bd41efb22a3bae0fd6656338ab",
+    "n_files": 18,
+    "n_py": 11,
+    "n_tests": 1,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "dgk"
+      ],
+      [
+        "version",
+        "4.0.0"
+      ],
+      [
+        "description",
+        "Distributed Governance Control Engine - hash-chained event ledger, perimeter interceptors, and control-theory regime classification"
+      ],
+      [
+        "requires-python",
+        ">=3.10"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        11
+      ],
+      [
+        ".md",
+        3
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "DIT",
+    "branch": "main",
+    "HEAD": "8270e7488d594827c161a202e71b7b36fcf20d8b",
+    "n_files": 44,
+    "n_py": 35,
+    "n_tests": 16,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "dit"
+      ],
+      [
+        "version",
+        "13.1.0"
+      ],
+      [
+        "description",
+        "Deterministic Integrity Tower: a gated, signed, ledger-sealed mediation proxy for probabilistic generators"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "dit",
+        "dit.cli:main"
+      ],
+      [
+        "addopts",
+        "--import-mode=importlib"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        35
+      ],
+      [
+        ".md",
+        5
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "Ecology",
+    "branch": "main",
+    "HEAD": "e345f8f9e4f6865cbf6b4548d6115371dca29bab",
+    "n_files": 449,
+    "n_py": 162,
+    "n_tests": 41,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".md",
+        204
+      ],
+      [
+        ".py",
+        162
+      ],
+      [
+        ".txt",
+        52
+      ],
+      [
+        ".patch",
+        8
+      ],
+      [
+        ".json",
+        7
+      ],
+      [
+        ".zip",
+        3
+      ],
+      [
+        ".diff",
+        3
+      ],
+      [
+        ".sh",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "Elegant",
+    "branch": "HEAD",
+    "HEAD": "HEAD",
+    "n_files": 0,
+    "n_py": 0,
+    "n_tests": 0,
+    "readme": false,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [],
+    "empty": true
+  },
+  {
+    "repository": "GEMS",
+    "branch": "main",
+    "HEAD": "1a7f289bd6c5c3b8e50019369d90d6c9d3effb5d",
+    "n_files": 121,
+    "n_py": 54,
+    "n_tests": 10,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "gems-infrastructure"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Evidence-preserving multi-Gem orchestration baseline reconstructed from the GEMS-FER-1.0 forensic package"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".md",
+        54
+      ],
+      [
+        ".py",
+        54
+      ],
+      [
+        ".json",
+        8
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ],
+      [
+        ".gitkeep",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "GSA",
+    "branch": "main",
+    "HEAD": "cf415740ef6bc64ac67ca07f77ec0cb3e4894964",
+    "n_files": 83,
+    "n_py": 43,
+    "n_tests": 5,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        43
+      ],
+      [
+        ".md",
+        13
+      ],
+      [
+        ".yaml",
+        6
+      ],
+      [
+        ".sh",
+        5
+      ],
+      [
+        ".yml",
+        4
+      ],
+      [
+        "LICENSE",
+        3
+      ],
+      [
+        ".example",
+        2
+      ],
+      [
+        ".gitignore",
+        2
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "GSA-815",
+    "branch": "main",
+    "HEAD": "53727ce7ee6704f8fcdda08d662faa15ce3fe4d4",
+    "n_files": 77,
+    "n_py": 53,
+    "n_tests": 21,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        53
+      ],
+      [
+        ".md",
+        12
+      ],
+      [
+        ".yaml",
+        3
+      ],
+      [
+        ".yml",
+        2
+      ],
+      [
+        ".gitmodules",
+        1
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "Governance_Gateway",
+    "branch": "main",
+    "HEAD": "43f4b31655abd954125802fe86dea0bf86c780f9",
+    "n_files": 20,
+    "n_py": 12,
+    "n_tests": 7,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "governance-gateway"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Minimal, platform-neutral governance boundary for immutable governed artifacts."
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "addopts",
+        "-q"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        12
+      ],
+      [
+        ".md",
+        3
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".json",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "HERALD",
+    "branch": "main",
+    "HEAD": "6e74bf25681fd65108e3bf2570479f5dbe6c6ec5",
+    "n_files": 35,
+    "n_py": 26,
+    "n_tests": 12,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "herald"
+      ],
+      [
+        "version",
+        "0.3.0"
+      ],
+      [
+        "description",
+        "Evidence-preserving natural-language interpretation layer for extracting, binding, validating, and handing off candidate claims"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        26
+      ],
+      [
+        ".md",
+        4
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".json",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "HTTP",
+    "branch": "main",
+    "HEAD": "c43cf1a24d5623b393b72452ef0db5e128f6fbca",
+    "n_files": 21,
+    "n_py": 15,
+    "n_tests": 5,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "http-protocol"
+      ],
+      [
+        "version",
+        "2.0.0"
+      ],
+      [
+        "description",
+        "HTTP - the Hyper Truth Testing Protocol: a 7x70 adversarial validation harness"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "http-grind",
+        "http_protocol.cli:main"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        15
+      ],
+      [
+        ".md",
+        2
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "ICEBURG",
+    "branch": "main",
+    "HEAD": "04008753c21caf6ed46a9e500cff0b888a3e7186",
+    "n_files": 37,
+    "n_py": 30,
+    "n_tests": 13,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        30
+      ],
+      [
+        ".md",
+        4
+      ],
+      [
+        ".ini",
+        1
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "OBSERVE",
+    "branch": "main",
+    "HEAD": "3004dcc6c29423d1afbf109074591cdf096e0230",
+    "n_files": 428,
+    "n_py": 187,
+    "n_tests": 84,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        187
+      ],
+      [
+        ".md",
+        76
+      ],
+      [
+        ".patch",
+        57
+      ],
+      [
+        ".bundle",
+        30
+      ],
+      [
+        ".txt",
+        23
+      ],
+      [
+        ".lua",
+        10
+      ],
+      [
+        ".yaml",
+        9
+      ],
+      [
+        ".json",
+        8
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "PERCEIVE",
+    "branch": "main",
+    "HEAD": "95fad78d727cbe0d8e951a78366149b01aa7ded7",
+    "n_files": 21,
+    "n_py": 15,
+    "n_tests": 5,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "perceive"
+      ],
+      [
+        "version",
+        "2.0.0"
+      ],
+      [
+        "description",
+        "PERCEIVE - a governance kernel with a verifiable audit ledger"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "perceive",
+        "perceive.cli:main"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        15
+      ],
+      [
+        ".md",
+        2
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "Reporting",
+    "branch": "claude/lean-technical-review-9n6xwk",
+    "HEAD": "33bd8827dc5276d098efc293b4b1802a1af6117d",
+    "n_files": 12,
+    "n_py": 6,
+    "n_tests": 2,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        6
+      ],
+      [
+        ".md",
+        3
+      ],
+      [
+        ".gitignore",
+        2
+      ],
+      [
+        ".txt",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "SAGE-K",
+    "branch": "main",
+    "HEAD": "52a08cd0a963917314190e1b573ac59676385b44",
+    "n_files": 26,
+    "n_py": 17,
+    "n_tests": 4,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "sage-k"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Reconstructed S.A.G.E.-K. simulation kernel, GSA hash-chain adapter, and AST graph extractor"
+      ],
+      [
+        "requires-python",
+        ">=3.10"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        17
+      ],
+      [
+        ".md",
+        5
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "STACK-Kernel",
+    "branch": "claude/verdict-receipts-governance-72o5xt",
+    "HEAD": "471bd563b0609b977de3ea0f32ce64eb58486436",
+    "n_files": 263,
+    "n_py": 1,
+    "n_tests": 0,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".rs",
+        177
+      ],
+      [
+        ".md",
+        22
+      ],
+      [
+        ".toml",
+        16
+      ],
+      [
+        ".json",
+        15
+      ],
+      [
+        ".log",
+        12
+      ],
+      [
+        ".cpp",
+        9
+      ],
+      [
+        ".hpp",
+        6
+      ],
+      [
+        ".lock",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "SWIZZLE",
+    "branch": "main",
+    "HEAD": "4505b00dce3f079edc082d5e1a9215bb884d83f5",
+    "n_files": 224,
+    "n_py": 155,
+    "n_tests": 54,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "swizzle"
+      ],
+      [
+        "version",
+        "0.7.1"
+      ],
+      [
+        "description",
+        "An adaptive adversarial evaluator for repository-level autonomous modification systems: builds reproducible repository states in which a target is likely to make an incorrect epistemic, diagnostic or mutational decision, and proves independently whether it did"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "swizzle",
+        "swizzle.cli:main"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        155
+      ],
+      [
+        ".md",
+        37
+      ],
+      [
+        ".json",
+        29
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "TIE",
+    "branch": "main",
+    "HEAD": "adf86e8da460700e90463805ae6946c5ed946eac",
+    "n_files": 55,
+    "n_py": 30,
+    "n_tests": 7,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "tie-transcript-intelligence-engine"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Reconstructed, evidence-preserving Transcript Intelligence Engine foundation"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        30
+      ],
+      [
+        ".md",
+        19
+      ],
+      [
+        ".json",
+        2
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "TOUCHSTONE",
+    "branch": "main",
+    "HEAD": "cea34ea84285550c6a87340747cfb3044a7a4570",
+    "n_files": 49,
+    "n_py": 32,
+    "n_tests": 0,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        32
+      ],
+      [
+        ".md",
+        13
+      ],
+      [
+        ".ghost_archive",
+        1
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".json",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "Triad-42",
+    "branch": "main",
+    "HEAD": "ab5521c9c65e4b190423f86f6974adefc1d4c8ee",
+    "n_files": 32,
+    "n_py": 20,
+    "n_tests": 3,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "triad42"
+      ],
+      [
+        "version",
+        "2.2.0"
+      ],
+      [
+        "description",
+        "An advisory cognitive review harness: Red, Gray, Green, and 42"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        20
+      ],
+      [
+        ".md",
+        8
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".json",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "URE",
+    "branch": "main",
+    "HEAD": "89c064090d4e44971f7987d9713699b06c7f3522",
+    "n_files": 41,
+    "n_py": 30,
+    "n_tests": 11,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "ure-engine"
+      ],
+      [
+        "version",
+        "2.0.0"
+      ],
+      [
+        "description",
+        "URE, the Universal Resilience Engine: stability, trajectory, regime, resilience, recovery and adaptation for governed systems."
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "Homepage",
+        "https://github.com/wking53214/URE"
+      ],
+      [
+        "Architecture",
+        "https://github.com/wking53214/URE/blob/main/docs/ARCHITECTURE.md"
+      ],
+      [
+        "Provenance",
+        "https://github.com/wking53214/URE/blob/main/docs/PROVENANCE.md"
+      ],
+      [
+        "addopts",
+        "-q --strict-markers"
+      ],
+      [
+        "python_version",
+        "3.11"
+      ],
+      [
+        "target-version",
+        "py311"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        30
+      ],
+      [
+        ".md",
+        6
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".json",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "VANGUARD",
+    "branch": "main",
+    "HEAD": "603107ffeff0daad73235df8a2e56cf01b37b98e",
+    "n_files": 5,
+    "n_py": 2,
+    "n_tests": 0,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        2
+      ],
+      [
+        ".ghost_archive",
+        1
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".md",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "ZTGKT",
+    "branch": "main",
+    "HEAD": "8c4b0774cdf4d4500b134f0ba9b55995bd7bbc68",
+    "n_files": 29,
+    "n_py": 19,
+    "n_tests": 6,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "ztgkt"
+      ],
+      [
+        "version",
+        "1.0.0"
+      ],
+      [
+        "description",
+        "Zero-Trust Guardrails & Kinetic Throttle: an execution-boundary gate for text generation."
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "asyncio_mode",
+        "auto"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        19
+      ],
+      [
+        ".md",
+        6
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "ZTS",
+    "branch": "main",
+    "HEAD": "e4a3421de6d0fa5c1e5328c2afa6e1687ed7ed7e",
+    "n_files": 25,
+    "n_py": 19,
+    "n_tests": 5,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "zts"
+      ],
+      [
+        "version",
+        "13.0.0"
+      ],
+      [
+        "description",
+        "Zero Trust Stack: a deterministic linguistic filtration array (G1-G7)"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "zts",
+        "zts.cli:main"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        19
+      ],
+      [
+        ".md",
+        3
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "composition-engine",
+    "branch": "main",
+    "HEAD": "d5df635bf8188f2bb65b121927b6814c5cdf04a9",
+    "n_files": 24,
+    "n_py": 13,
+    "n_tests": 3,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "composition-engine"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Universal system orchestrator: compose heterogeneous systems by declared outcome model, without a universal translator"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "Homepage",
+        "https://github.com/wking53214/composition-engine"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        13
+      ],
+      [
+        ".md",
+        6
+      ],
+      [
+        ".json",
+        2
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "content-polish-pipeline",
+    "branch": "main",
+    "HEAD": "2fbb9a59e9ce6df63d605da10f3ca9ab68b1c9ca",
+    "n_files": 11,
+    "n_py": 5,
+    "n_tests": 1,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "content-polish-pipeline"
+      ],
+      [
+        "version",
+        "1.2.0"
+      ],
+      [
+        "description",
+        "LLM output quality gate: validates generated text against linguistic constraints and retries with recalibration feedback."
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "license",
+        "MIT"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        5
+      ],
+      [
+        ".md",
+        3
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "experimental",
+    "branch": "main",
+    "HEAD": "1f34e6b14eeeb7167f2f932434adc3bc6c84b5c8",
+    "n_files": 98,
+    "n_py": 62,
+    "n_tests": 35,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        62
+      ],
+      [
+        ".md",
+        29
+      ],
+      [
+        ".ini",
+        1
+      ],
+      [
+        ".txt",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ],
+      [
+        ".bib",
+        1
+      ],
+      [
+        ".yaml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "fortress-kernel",
+    "branch": "Main",
+    "HEAD": "c3615693afaffe9373d379aacea35de8046ca813",
+    "n_files": 15,
+    "n_py": 7,
+    "n_tests": 4,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "fortress-kernel"
+      ],
+      [
+        "version",
+        "1.0.0"
+      ],
+      [
+        "description",
+        "Minimal, composable governance kernel with integrity checking, invariant enforcement, and mandate-driven control."
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "Homepage",
+        "https://github.com/wking53214/fortress-kernel"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        7
+      ],
+      [
+        ".json",
+        3
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".md",
+        1
+      ],
+      [
+        ".yml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "ghost_tools",
+    "branch": "main",
+    "HEAD": "22cf215611e178fcb6e589ec9ac08bb1076ef9d5",
+    "n_files": 208,
+    "n_py": 185,
+    "n_tests": 129,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "ghost-tools"
+      ],
+      [
+        "version",
+        "1.9.1"
+      ],
+      [
+        "description",
+        "Codebase integrity toolkit: finds structural ghosts, proves vacuous tests by mutation, outlines missing code, and turns human-triaged findings into accurate docs"
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ],
+      [
+        "Homepage",
+        "https://github.com/wking53214/ghost_tools"
+      ],
+      [
+        "Changelog",
+        "https://github.com/wking53214/ghost_tools/blob/main/CHANGELOG.md"
+      ],
+      [
+        "ghost-buster",
+        "ghost_buster.cli:main"
+      ],
+      [
+        "ghost-writer",
+        "ghost_writer.cli:main"
+      ],
+      [
+        "ghost-triage",
+        "ghost_writer.triage:main"
+      ],
+      [
+        "blackhole-extrapolator",
+        "blackhole_extrapolator.cli:main"
+      ],
+      [
+        "addopts",
+        "-n auto"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        185
+      ],
+      [
+        ".md",
+        9
+      ],
+      [
+        ".json",
+        4
+      ],
+      [
+        "LICENSE",
+        2
+      ],
+      [
+        ".yml",
+        2
+      ],
+      [
+        ".gitleaksignore",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "interconnected_alpha",
+    "branch": "main",
+    "HEAD": "c7b966b85bd62cf3da485724e09344a7daf51875",
+    "n_files": 13,
+    "n_py": 10,
+    "n_tests": 4,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "name",
+        "alpha"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Detects named Keys in raw pediatric vitals, ready to feed into interconnected_zeta Locks."
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        10
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".md",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "interconnected_beta",
+    "branch": "main",
+    "HEAD": "3bb9c6f8261ea87bb508501f550e755619f2d3bf",
+    "n_files": 12,
+    "n_py": 9,
+    "n_tests": 3,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "name",
+        "beta"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Lock states + Keys -> a governed Decision with narrative (reasoning, reversals, instructions)."
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        9
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".md",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "interconnected_delta",
+    "branch": "main",
+    "HEAD": "5745b35cc85b42bd1720f0ab74f63c17b551d87f",
+    "n_files": 13,
+    "n_py": 10,
+    "n_tests": 4,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "name",
+        "delta"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "Records beta.Decisions in a hash-chained ledger, tracks outcome obligations, and feeds resolved outcomes into cohort-level fairness screening."
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        10
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".md",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "interconnected_zeta",
+    "branch": "main",
+    "HEAD": "6d6210338413dbbdc48637a5c5d6dba7255d332c",
+    "n_files": 13,
+    "n_py": 10,
+    "n_tests": 4,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [
+      [
+        "name",
+        "zeta"
+      ],
+      [
+        "version",
+        "0.1.0"
+      ],
+      [
+        "description",
+        "A domain-agnostic Locks layer: Keys open Locks under declared AND/OR/N-of-M combinations, with dwell debounce, cooldown latching, and force bypass."
+      ],
+      [
+        "requires-python",
+        ">=3.9"
+      ],
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        10
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".md",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "observe-perceive",
+    "branch": "main",
+    "HEAD": "f4d48384999f73e53ad514a5806a86d877922d0f",
+    "n_files": 117,
+    "n_py": 91,
+    "n_tests": 47,
+    "readme": true,
+    "pyproject": true,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [
+      [
+        "build-backend",
+        "setuptools.build_meta"
+      ],
+      [
+        "name",
+        "observe-perceive"
+      ],
+      [
+        "version",
+        "1.3.0"
+      ],
+      [
+        "description",
+        "The governed action gate: admission, screen, policy gates, Conservation Kernel approval, execution, observation, record, with a verifiable hash chain over all of it."
+      ],
+      [
+        "readme",
+        "README.md"
+      ],
+      [
+        "requires-python",
+        ">=3.11"
+      ]
+    ],
+    "top_ext": [
+      [
+        ".py",
+        91
+      ],
+      [
+        ".md",
+        17
+      ],
+      [
+        ".txt",
+        2
+      ],
+      [
+        ".ini",
+        1
+      ],
+      [
+        "LICENSE",
+        1
+      ],
+      [
+        ".gitignore",
+        1
+      ],
+      [
+        ".toml",
+        1
+      ],
+      [
+        ".json",
+        1
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "p3-2-governance-research",
+    "branch": "main",
+    "HEAD": "56dfa99992f9ddffe7a6880b1ac3a8def505c50e",
+    "n_files": 7,
+    "n_py": 0,
+    "n_tests": 0,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": false,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".md",
+        7
+      ]
+    ],
+    "empty": false
+  },
+  {
+    "repository": "sentinel_os",
+    "branch": "main",
+    "HEAD": "81cfdb01b3b4854ea355ab2497041184020a30f3",
+    "n_files": 263,
+    "n_py": 176,
+    "n_tests": 73,
+    "readme": true,
+    "pyproject": false,
+    "setup": false,
+    "cns_mention": true,
+    "scripts": [],
+    "top_ext": [
+      [
+        ".py",
+        176
+      ],
+      [
+        ".md",
+        50
+      ],
+      [
+        ".lua",
+        10
+      ],
+      [
+        ".txt",
+        5
+      ],
+      [
+        ".sh",
+        4
+      ],
+      [
+        ".sql",
+        3
+      ],
+      [
+        ".gitignore",
+        2
+      ],
+      [
+        ".json",
+        2
+      ]
+    ],
+    "empty": false
+  }
+]
