@@ -34,8 +34,9 @@ from .authorization import Authorization, Unauthorized
 from .critic import PoetryCritic, CriticReport
 from .narrative import Narrative, inspect_tree
 from .tagteam import TagTeam, TagTeamResult
+from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "EpistemicState",
@@ -51,5 +52,8 @@ __all__ = [
     "inspect_tree",
     "TagTeam",
     "TagTeamResult",
+    "HorsemenWorkflow",
+    "ChangeClass",
+    "ScopedGrant",
     "__version__",
 ]
