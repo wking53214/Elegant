@@ -34,7 +34,7 @@ elegant = "elegant.cli:main"
 dev = ["pytest>=8"]
 
 [tool.setuptools]
-packages = ["elegant"]
+packages = ["elegant", "elegant.horsemen"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
