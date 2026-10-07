@@ -72,3 +72,32 @@ def test_authorized_rewrite_survives_honesty_oracle(tmp_path: Path):
     assert result.decision in {"ACCEPT", "REJECT"}  # critic may still find other ugliness
     # python sources untouched
     assert '"""demo package."""' in (tmp_path / "pkg" / "__init__.py").read_text(encoding="utf-8")
+
+
+def _fake_swizzle(root: Path, exit_code: int, summary: str) -> Path:
+    pkg = root / "fake_swizzle" / "swizzle"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "cli.py").write_text(
+        f"import sys\nprint({summary!r})\nsys.exit({exit_code})\n", encoding="utf-8")
+    return root / "fake_swizzle"
+
+
+def test_swizzle_proofs_failing_blocks_accept(tmp_path: Path):
+    target = tmp_path / "repo"
+    target.mkdir()
+    _tree(target)
+    bad = _fake_swizzle(tmp_path, 1, "11 of 12 proofs hold.")
+    auth = grant("william", "transform", str(target.resolve()), "documentation", "test")
+    team = TagTeam(swizzle_root=bad, proposer=documentation_honesty_proposer)
+    result = team.run(target, authorization=auth, findings=[])
+    assert result.decision == "INCONCLUSIVE"
+    assert any("11 of 12 proofs hold" in n for n in result.notes)
+
+
+def test_swizzle_not_configured_is_said_out_loud(tmp_path: Path):
+    target = tmp_path / "repo"
+    target.mkdir()
+    _tree(target)
+    result = TagTeam().run(target, findings=[])
+    assert any("SWIZZLE proofs NOT RUN" in n for n in result.notes)

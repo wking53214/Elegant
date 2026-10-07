@@ -27,7 +27,8 @@ from .critic import PoetryCritic, CriticReport
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
 from .narrative import inspect_tree
-from .swizzle import AttackResult, GroundTruth, attack_documentation_honesty, freeze
+from .swizzle import (AttackResult, GroundTruth, attack_documentation_honesty, freeze,
+                      swizzle_proofs_hold)
 
 
 @dataclass
@@ -73,6 +74,17 @@ class TagTeam:
             # its own proposal is the self-certifying loop.
             if authorization.actor.lower() in {"elegant", "self"}:
                 raise Unauthorized("Elegant cannot authorize work on itself.")
+
+        # SWIZZLE's instrument check: are its own planted defects still real?
+        # Run once per loop, recorded either way, and required for ACCEPT.
+        swizzle_sound: Optional[bool] = None
+        if self.swizzle_root is not None:
+            import sys
+            swizzle_sound, summary = swizzle_proofs_hold(
+                swizzle_root=self.swizzle_root, python=python or sys.executable)
+            notes.append(summary)
+        else:
+            notes.append("SWIZZLE proofs NOT RUN: no swizzle_root. The adversary is uncalibrated.")
 
         nar = inspect_tree(target)
         critic_before = self.critic.critique(target, nar)
@@ -149,6 +161,9 @@ class TagTeam:
             decision = "REJECT"
         elif attack.judgement == "INCONCLUSIVE":
             decision = "INCONCLUSIVE"
+        elif swizzle_sound is False:
+            decision = "INCONCLUSIVE"
+            notes.append("SWIZZLE's own proofs do not hold, so no attack result can back an ACCEPT.")
         elif not critic_after.good_enough:
             decision = "REJECT"
             notes.append("Oracle accepted test-count honesty; critic still says this isn't good enough yet.")
