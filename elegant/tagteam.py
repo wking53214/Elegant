@@ -27,7 +27,8 @@ from .critic import PoetryCritic, CriticReport
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
 from .narrative import inspect_tree
-from .swizzle import AttackResult, GroundTruth, attack_documentation_honesty, freeze
+from .swizzle import (AttackResult, GroundTruth, attack_documentation_honesty, freeze,
+                      swizzle_proofs_hold)
 
 
 @dataclass
@@ -43,6 +44,9 @@ class TagTeamResult:
     critic_after: Optional[CriticReport]
     decision: str  # ACCEPT / REJECT / REFUSED / INCONCLUSIVE
     notes: tuple[str, ...]
+    #: True: SWIZZLE's proofs held. False: they did not (no write happens).
+    #: None: SWIZZLE was not configured, which the notes say out loud.
+    swizzle_sound: Optional[bool] = None
 
 
 class TagTeam:
@@ -73,6 +77,17 @@ class TagTeam:
             # its own proposal is the self-certifying loop.
             if authorization.actor.lower() in {"elegant", "self"}:
                 raise Unauthorized("Elegant cannot authorize work on itself.")
+
+        # SWIZZLE's instrument check: are its own planted defects still real?
+        # Run once per loop, recorded either way, and required for ACCEPT.
+        swizzle_sound: Optional[bool] = None
+        if self.swizzle_root is not None:
+            import sys
+            swizzle_sound, summary = swizzle_proofs_hold(
+                swizzle_root=self.swizzle_root, python=python or sys.executable)
+            notes.append(summary)
+        else:
+            notes.append("SWIZZLE proofs NOT RUN: no swizzle_root. The adversary is uncalibrated.")
 
         nar = inspect_tree(target)
         critic_before = self.critic.critique(target, nar)
@@ -106,6 +121,7 @@ class TagTeam:
                 critic_after=None,
                 decision="INCONCLUSIVE",
                 notes=tuple(notes + ["No proposer. Tag team observed and criticised only."]),
+                swizzle_sound=swizzle_sound,
             )
 
         proposal = self.proposer(target, observed, ground)
@@ -123,6 +139,26 @@ class TagTeam:
                 critic_after=None,
                 decision="REFUSED",
                 notes=tuple(notes + ["Human authorization missing. Proposal stands. No write."]),
+                swizzle_sound=swizzle_sound,
+            )
+
+        if swizzle_sound is False:
+            # Stop before the write: an adversary whose own proofs fail
+            # cannot judge the change afterwards, so the change is not made.
+            proposal.status = TransformationStatus.PROPOSED
+            return TagTeamResult(
+                target=str(target),
+                baseline=ground.readme_sha16,
+                observed=observed,
+                proposal=proposal,
+                applied=False,
+                reobserved=(),
+                attack=None,
+                critic_before=critic_before,
+                critic_after=None,
+                decision="INCONCLUSIVE",
+                notes=tuple(notes + ["SWIZZLE's own proofs do not hold; nothing was written."]),
+                swizzle_sound=False,
             )
 
         proposal.authorize(authorization)
@@ -167,4 +203,5 @@ class TagTeam:
             critic_after=critic_after,
             decision=decision,
             notes=tuple(notes),
+            swizzle_sound=swizzle_sound,
         )

@@ -15,20 +15,43 @@ class SpecimenRef:
     epistemic_status: str
     isolation_required: bool = True
 
+class TouchstoneUnavailable(RuntimeError):
+    """TOUCHSTONE's answer key could not be read. Never treated as 'no specimens'."""
+
+
 class TouchstoneAdapter:
     def __init__(self, touchstone_root=None):
         self.root = Path(touchstone_root) if touchstone_root else None
 
     def load_registry(self, registry_path=None):
+        """Read TOUCHSTONE's published answer key (touchstone_production/registry.json).
+
+        Fails loudly rather than returning an empty list: an empty specimen
+        set looks exactly like "nothing to check" and cannot be told apart
+        from a broken link. Silence is the defect.
+        """
         if registry_path is None:
             if self.root is None:
-                return []
+                raise TouchstoneUnavailable(
+                    "no TOUCHSTONE root configured; pass touchstone_root or registry_path")
             registry_path = self.root / "touchstone_production" / "registry.json"
-        if not registry_path or not Path(registry_path).exists():
-            return []
-        data = json.loads(Path(registry_path).read_text(encoding="utf-8"))
+        registry_path = Path(registry_path)
+        if not registry_path.is_file():
+            raise TouchstoneUnavailable(
+                f"TOUCHSTONE registry not found at {registry_path}; generate it in TOUCHSTONE with "
+                "`python3 -m touchstone_production.manifest_registry --write`")
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or not data:
+            raise TouchstoneUnavailable(f"TOUCHSTONE registry at {registry_path} is empty or malformed")
+        base = self.root if self.root is not None else registry_path.parent.parent
+        missing = [d.get("path", "") for d in data.values()
+                   if not isinstance(d, dict) or not d.get("path") or not (base / d["path"]).is_file()]
+        if missing:
+            raise TouchstoneUnavailable(
+                f"TOUCHSTONE registry names {len(missing)} specimen file(s) that do not exist, "
+                f"e.g. {missing[0]!r}")
         out = []
-        for sid, d in (data.items() if isinstance(data, dict) else []):
+        for sid, d in data.items():
             out.append(SpecimenRef(
                 specimen_id=d.get("specimen_id", sid),
                 specimen_class=d.get("specimen_class", "UNKNOWN"),
@@ -43,7 +66,8 @@ class TouchstoneAdapter:
         return Handoff.make(
             producer="TOUCHSTONE", consumer="Elegant", kind=HandoffKind.SPECIMEN,
             repository=repository, repository_sha=repository_sha, baseline_id=baseline_id,
-            epistemic_state=EpistemicLabel.REASONED,
+            epistemic_state=EpistemicLabel.REASONED if specimens else EpistemicLabel.UNKNOWN,
+            result="SPECIMENS_PROVIDED" if specimens else "NO_SPECIMENS_UNKNOWN",
             payload={"specimens": [
                 {"specimen_id": s.specimen_id, "specimen_class": s.specimen_class,
                  "path": s.path, "expected_verdict": s.expected_verdict,

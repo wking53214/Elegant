@@ -17,6 +17,7 @@ from .critic import PoetryCritic
 from .ghost import defects_from_file, load_findings
 from .narrative import inspect_tree
 from .readme import compile_readme
+from .proposers import documentation_honesty_proposer
 from .tagteam import TagTeam
 
 
@@ -34,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     p_t = sub.add_parser("tagteam", help="observe → (optional) propose/apply → re-inspect → attack")
     p_t.add_argument("path", type=Path)
     p_t.add_argument("--ghost-root", type=Path, default=None)
+    p_t.add_argument("--swizzle-root", type=Path, default=None,
+                     help="SWIZZLE checkout; its proofs must hold before anything is ACCEPTed")
     p_t.add_argument("--from-ghost", type=Path, default=None, help="findings JSON instead of a live scan")
     p_t.add_argument("--authorize", default=None, metavar="ACTOR")
     p_t.add_argument("--reason", default="")
@@ -80,7 +83,12 @@ def main(argv: list[str] | None = None) -> int:
             except Unauthorized as e:
                 print(f"elegant: {e}", file=sys.stderr)
                 return 2
-        team = TagTeam(ghost_tools_root=args.ghost_root)
+        # The documentation-honesty proposer is v0.1.0's one proposer. Without
+        # it the CLI loop could only ever observe: every run ended
+        # INCONCLUSIVE ("No proposer") and nothing reached SWIZZLE. It still
+        # writes nothing unless --authorize is given.
+        team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
+                       proposer=documentation_honesty_proposer)
         result = team.run(args.path, authorization=auth, findings=findings)
         payload = {
             "decision": result.decision,
@@ -94,8 +102,12 @@ def main(argv: list[str] | None = None) -> int:
             },
             "critic_before": result.critic_before.verdict,
             "critic_after": None if result.critic_after is None else result.critic_after.verdict,
+            "swizzle_sound": result.swizzle_sound,
         }
         print(json.dumps(payload, indent=2))
+        if result.swizzle_sound is False:
+            print("elegant: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
+            return 2
         return 0 if result.decision in {"ACCEPT", "INCONCLUSIVE", "REFUSED"} else 1
     return 2
 

@@ -9,7 +9,8 @@ rewrites; never certifies itself.
 | Related | Role |
 |---------|------|
 | [ghost_tools](https://github.com/wking53214/ghost_tools) | Forensic observation. Owns findings, baselines, ledgers. |
-| [SWIZZLE](https://github.com/wking53214/SWIZZLE) | Adversarial challenge. Owns independent oracles and ground truth. |
+| [SWIZZLE](https://github.com/wking53214/SWIZZLE) | Adversarial challenge. Owns independent oracles and ground truth. Its proofs must hold before Elegant ACCEPTs. |
+| [TOUCHSTONE](https://github.com/wking53214/TOUCHSTONE) | Specimen answer key, read from `touchstone_production/registry.json`. |
 | CNS (private) | Interoperability contracts. Elegant may analyse a seam. Elegant never modifies CNS. |
 
 ```text
