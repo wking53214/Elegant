@@ -90,7 +90,7 @@ class HorsemenWorkflow:
         hof = self.touchstone.handoff_specimens(
             specimens, repository=st.repository, repository_sha=st.baseline_sha, baseline_id=st.baseline_id,
         )
-        st._record(WorkflowPhase.TOUCHSTONE, "ok", hof, count=len(specimens))
+        st._record(WorkflowPhase.TOUCHSTONE, hof.result or "ok", hof, count=len(specimens))
         return hof
 
     def ingest_findings(self, workflow_id, findings, *, phase="inspect"):

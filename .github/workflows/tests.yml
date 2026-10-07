@@ -10,8 +10,16 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
+      # TOUCHSTONE is public; checking it out makes test_live_touchstone_registry
+      # run here instead of skipping, so a broken TOUCHSTONE link turns CI red.
+      - uses: actions/checkout@v4
+        with:
+          repository: wking53214/TOUCHSTONE
+          path: _touchstone
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: pytest -q
+        env:
+          TOUCHSTONE_ROOT: ${{ github.workspace }}/_touchstone
