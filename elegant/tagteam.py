@@ -44,6 +44,9 @@ class TagTeamResult:
     critic_after: Optional[CriticReport]
     decision: str  # ACCEPT / REJECT / REFUSED / INCONCLUSIVE
     notes: tuple[str, ...]
+    #: True: SWIZZLE's proofs held. False: they did not (no write happens).
+    #: None: SWIZZLE was not configured, which the notes say out loud.
+    swizzle_sound: Optional[bool] = None
 
 
 class TagTeam:
@@ -118,6 +121,7 @@ class TagTeam:
                 critic_after=None,
                 decision="INCONCLUSIVE",
                 notes=tuple(notes + ["No proposer. Tag team observed and criticised only."]),
+                swizzle_sound=swizzle_sound,
             )
 
         proposal = self.proposer(target, observed, ground)
@@ -135,6 +139,26 @@ class TagTeam:
                 critic_after=None,
                 decision="REFUSED",
                 notes=tuple(notes + ["Human authorization missing. Proposal stands. No write."]),
+                swizzle_sound=swizzle_sound,
+            )
+
+        if swizzle_sound is False:
+            # Stop before the write: an adversary whose own proofs fail
+            # cannot judge the change afterwards, so the change is not made.
+            proposal.status = TransformationStatus.PROPOSED
+            return TagTeamResult(
+                target=str(target),
+                baseline=ground.readme_sha16,
+                observed=observed,
+                proposal=proposal,
+                applied=False,
+                reobserved=(),
+                attack=None,
+                critic_before=critic_before,
+                critic_after=None,
+                decision="INCONCLUSIVE",
+                notes=tuple(notes + ["SWIZZLE's own proofs do not hold; nothing was written."]),
+                swizzle_sound=False,
             )
 
         proposal.authorize(authorization)
@@ -161,9 +185,6 @@ class TagTeam:
             decision = "REJECT"
         elif attack.judgement == "INCONCLUSIVE":
             decision = "INCONCLUSIVE"
-        elif swizzle_sound is False:
-            decision = "INCONCLUSIVE"
-            notes.append("SWIZZLE's own proofs do not hold, so no attack result can back an ACCEPT.")
         elif not critic_after.good_enough:
             decision = "REJECT"
             notes.append("Oracle accepted test-count honesty; critic still says this isn't good enough yet.")
@@ -182,4 +203,5 @@ class TagTeam:
             critic_after=critic_after,
             decision=decision,
             notes=tuple(notes),
+            swizzle_sound=swizzle_sound,
         )

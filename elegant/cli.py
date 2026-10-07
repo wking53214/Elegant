@@ -102,8 +102,12 @@ def main(argv: list[str] | None = None) -> int:
             },
             "critic_before": result.critic_before.verdict,
             "critic_after": None if result.critic_after is None else result.critic_after.verdict,
+            "swizzle_sound": result.swizzle_sound,
         }
         print(json.dumps(payload, indent=2))
+        if result.swizzle_sound is False:
+            print("elegant: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
+            return 2
         return 0 if result.decision in {"ACCEPT", "INCONCLUSIVE", "REFUSED"} else 1
     return 2
 

@@ -90,8 +90,11 @@ def test_swizzle_proofs_failing_blocks_accept(tmp_path: Path):
     bad = _fake_swizzle(tmp_path, 1, "11 of 12 proofs hold.")
     auth = grant("william", "transform", str(target.resolve()), "documentation", "test")
     team = TagTeam(swizzle_root=bad, proposer=documentation_honesty_proposer)
+    before = (target / "PROVENANCE.md").read_text(encoding="utf-8")
     result = team.run(target, authorization=auth, findings=[])
     assert result.decision == "INCONCLUSIVE"
+    assert result.swizzle_sound is False and not result.applied
+    assert (target / "PROVENANCE.md").read_text(encoding="utf-8") == before
     assert any("11 of 12 proofs hold" in n for n in result.notes)
 
 
