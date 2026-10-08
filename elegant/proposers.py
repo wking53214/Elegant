@@ -7,11 +7,33 @@ proposal: documentation honesty for a false test-count claim.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .models import Defect, FileEdit, Transformation, TransformationStatus
 from .narrative import inspect_tree
 from .swizzle import GroundTruth
+
+#: A sentence presenting a count as tests that passed: "All 16 tests passed
+#: unmodified on python3." or "16 tests passed in CI." The whole sentence is
+#: matched (up to its full stop or line end) so it can be replaced whole.
+_CLAIM_SENTENCE = re.compile(
+    r"[^.\n]*?\b(?:All\s+)?(\d+)\s+tests?\s+passed\b[^.\n]*\.?")
+
+
+def _honest_sentence(match: "re.Match[str]", counted: int) -> str:
+    """The replacement for one false claim: what is counted now, and what was claimed.
+
+    It says how many test functions the tree holds, not that they passed:
+    the proposer has counted them, not run them. The old number is kept, in
+    a form no count-claim check reads as a current claim.
+    """
+    claimed = int(match.group(1))
+    if claimed == counted:
+        return match.group(0)
+    lead = re.match(r"\s*", match.group(0)).group(0)
+    return (f"{lead}The tree contains {counted} `test_*` functions "
+            f"(an earlier version of this document gave {claimed}).")
 
 
 def documentation_honesty_proposer(
@@ -32,33 +54,17 @@ def documentation_honesty_proposer(
     edits: list[FileEdit] = []
     evidence = [d.identity for d in observed]
 
-    # Always correct PROVENANCE-style "All N tests passed" when N != count.
+    # Rewrite the whole sentence that carries a false count, not just the
+    # number inside it. Splicing a clause into the old sentence kept its tail
+    # and produced text like "... (historical claim of 16 ...) unmodified on
+    # the system python3." (registry run, 2026-10-07). One clean sentence is
+    # the beautiful version and still keeps the historical number.
     for doc in ("PROVENANCE.md", "README.md"):
         path = target / doc
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
-        new = text
-        import re
-        def repl(m: re.Match[str]) -> str:
-            n = int(m.group(1))
-            if n == nar.test_functions:
-                return m.group(0)
-            return (
-                f"{nar.test_functions} `test_*` functions are present in the "
-                f"current tree (historical claim of {n} is preserved as history, "
-                f"not as current count)"
-            )
-        new = re.sub(
-            r"All (\d+) tests passed",
-            repl,
-            new,
-        )
-        new = re.sub(
-            r"(\d+) tests? passed unmodified",
-            repl,
-            new,
-        )
+        new = _CLAIM_SENTENCE.sub(lambda m: _honest_sentence(m, nar.test_functions), text)
         if new != text:
             edits.append(FileEdit(path=doc, kind="write", new=new, old=text))
 

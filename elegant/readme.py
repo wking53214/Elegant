@@ -78,7 +78,7 @@ def compile_readme(
 
 ## WHAT THIS IS
 
-{extra.get("WHAT THIS IS", f"`{name}` as declared by its own tree. Version `{narrative.version or "UNKNOWN"}`.")}
+{extra.get("WHAT THIS IS", f"`{name}` as declared by its own tree. Version `{narrative.version or 'UNKNOWN'}`.")}
 
 ## WHY IT EXISTS
 

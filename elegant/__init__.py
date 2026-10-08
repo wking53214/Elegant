@@ -36,7 +36,7 @@ from .narrative import Narrative, inspect_tree
 from .tagteam import TagTeam, TagTeamResult
 from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "EpistemicState",

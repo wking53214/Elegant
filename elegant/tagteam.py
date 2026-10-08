@@ -2,9 +2,15 @@
 
 Conceptual order (starting hypothesis, implemented as this module):
 
-    observe (Ghost) → propose (Elegant) → authorize (human)
-        → transform → re-inspect (Ghost) → attack (SWIZZLE-style oracle)
+    calibrate (SWIZZLE proves its own instrument)
+        → observe (Ghost) → propose (Elegant) → authorize (human)
+        → suite before (Rule 7) → transform → suite after (Rule 7)
+        → re-inspect (Ghost) → attack (SWIZZLE-style oracle)
         → ACCEPT / REJECT
+
+Every stop before the write returns the same shape through `_stopped`, so
+the reason a run ended is always one sentence in the notes and nothing is
+written. A change that breaks the target's suite is put back.
 
 This module refuses three self-certifying loops:
 
@@ -18,15 +24,17 @@ critic, and the critic does not import the oracle.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Callable, Dict, Optional, Sequence
 
 from .authorization import Authorization, Unauthorized
 from .critic import PoetryCritic, CriticReport
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
 from .narrative import inspect_tree
+from .suite import SuiteRun, preserved, run_suite
 from .swizzle import (AttackResult, GroundTruth, attack_documentation_honesty, freeze,
                       swizzle_proofs_hold)
 
@@ -47,6 +55,9 @@ class TagTeamResult:
     #: True: SWIZZLE's proofs held. False: they did not (no write happens).
     #: None: SWIZZLE was not configured, which the notes say out loud.
     swizzle_sound: Optional[bool] = None
+    #: Rule 7: the target's suite before and after the change, as measured.
+    suite_before: Optional[SuiteRun] = None
+    suite_after: Optional[SuiteRun] = None
 
 
 class TagTeam:
@@ -56,10 +67,14 @@ class TagTeam:
         ghost_tools_root: Optional[Path] = None,
         swizzle_root: Optional[Path] = None,
         proposer: Optional[Callable[[Path, tuple[Defect, ...], GroundTruth], Transformation]] = None,
+        run_tests: bool = True,
     ) -> None:
         self.ghost_tools_root = ghost_tools_root
         self.swizzle_root = swizzle_root
         self.proposer = proposer
+        #: Rule 7. Off only for callers that measure the suite some other way;
+        #: the notes say so when it is off.
+        self.run_tests = run_tests
         self.critic = PoetryCritic()
 
     def run(
@@ -71,137 +86,148 @@ class TagTeam:
         python: str = "",
     ) -> TagTeamResult:
         target = Path(target).resolve()
+        python = python or sys.executable
+        _refuse_self_authorization(target, authorization)
         notes: list[str] = []
-        if Path(target).name.lower() == "elegant" and authorization and authorization.granted:
-            # Elegant may transform other repos. Transforming *itself* under
-            # its own proposal is the self-certifying loop.
-            if authorization.actor.lower() in {"elegant", "self"}:
-                raise Unauthorized("Elegant cannot authorize work on itself.")
-
-        # SWIZZLE's instrument check: are its own planted defects still real?
-        # Run once per loop, recorded either way, and required for ACCEPT.
-        swizzle_sound: Optional[bool] = None
-        if self.swizzle_root is not None:
-            import sys
-            swizzle_sound, summary = swizzle_proofs_hold(
-                swizzle_root=self.swizzle_root, python=python or sys.executable)
-            notes.append(summary)
-        else:
-            notes.append("SWIZZLE proofs NOT RUN: no swizzle_root. The adversary is uncalibrated.")
-
-        nar = inspect_tree(target)
-        critic_before = self.critic.critique(target, nar)
+        swizzle_sound = self._calibrate(python, notes)
+        critic_before = self.critic.critique(target, inspect_tree(target))
         ground = freeze(target)
-
-        if findings is None:
-            if self.ghost_tools_root is None:
-                observed: tuple[Defect, ...] = ()
-                notes.append("Ghost Tools scan SKIPPED: no ghost_tools_root. Observation is UNKNOWN.")
-            else:
-                import sys
-                py = python or sys.executable
-                raw = ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=py)
-                findings = list(raw)
-                observed = defects_from_ghost(raw)
-                notes.append(f"Ghost Tools observed {len(observed)} finding(s).")
-        else:
-            observed = defects_from_ghost(findings)
-            notes.append(f"Ghost Tools findings loaded ({len(observed)}), not scanned in this process.")
+        observed = self._observe(target, findings, python, notes)
+        common = dict(target=str(target), baseline=ground.readme_sha16, observed=observed,
+                      critic_before=critic_before, swizzle_sound=swizzle_sound)
 
         if self.proposer is None:
-            return TagTeamResult(
-                target=str(target),
-                baseline=ground.readme_sha16,
-                observed=observed,
-                proposal=None,
-                applied=False,
-                reobserved=(),
-                attack=None,
-                critic_before=critic_before,
-                critic_after=None,
-                decision="INCONCLUSIVE",
-                notes=tuple(notes + ["No proposer. Tag team observed and criticised only."]),
-                swizzle_sound=swizzle_sound,
-            )
-
+            return _stopped(common, notes, "INCONCLUSIVE",
+                            "No proposer. Tag team observed and criticised only.")
         proposal = self.proposer(target, observed, ground)
         if authorization is None or not authorization.granted:
             proposal.status = TransformationStatus.PROPOSED
-            return TagTeamResult(
-                target=str(target),
-                baseline=ground.readme_sha16,
-                observed=observed,
-                proposal=proposal,
-                applied=False,
-                reobserved=(),
-                attack=None,
-                critic_before=critic_before,
-                critic_after=None,
-                decision="REFUSED",
-                notes=tuple(notes + ["Human authorization missing. Proposal stands. No write."]),
-                swizzle_sound=swizzle_sound,
-            )
-
+            return _stopped(common, notes, "REFUSED",
+                            "Human authorization missing. Proposal stands. No write.", proposal)
         if swizzle_sound is False:
-            # Stop before the write: an adversary whose own proofs fail
-            # cannot judge the change afterwards, so the change is not made.
+            # An adversary whose own proofs fail cannot judge the change
+            # afterwards, so the change is not made.
             proposal.status = TransformationStatus.PROPOSED
-            return TagTeamResult(
-                target=str(target),
-                baseline=ground.readme_sha16,
-                observed=observed,
-                proposal=proposal,
-                applied=False,
-                reobserved=(),
-                attack=None,
-                critic_before=critic_before,
-                critic_after=None,
-                decision="INCONCLUSIVE",
-                notes=tuple(notes + ["SWIZZLE's own proofs do not hold; nothing was written."]),
-                swizzle_sound=False,
-            )
+            return _stopped(common, notes, "INCONCLUSIVE",
+                            "SWIZZLE's own proofs do not hold; nothing was written.", proposal)
 
+        before = self._suite(target, python, notes, "before")
+        if before is not None and not before.green:
+            proposal.status = TransformationStatus.PROPOSED
+            return _stopped(common, notes, "INCONCLUSIVE",
+                            "Rule 7: the target's suite is not green before the change "
+                            f"({before.describe()}), so it cannot protect behavior. Nothing was written.",
+                            proposal, suite_before=before)
+
+        snapshot = _snapshot(target, proposal)
         proposal.authorize(authorization)
         proposal.apply(target)
         notes.append("Transformation applied under granted authorization.")
 
-        reobserved: tuple[Defect, ...] = ()
-        if self.ghost_tools_root is not None:
-            import sys
-            py = python or sys.executable
-            raw2 = ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=py)
-            reobserved = defects_from_ghost(raw2)
-            notes.append(f"Ghost Tools re-inspected: {len(reobserved)} finding(s).")
-            before_ids = {d.ghost_id for d in observed if d.ghost_id}
-            after_ids = {d.ghost_id for d in reobserved if d.ghost_id}
-            notes.append(
-                f"finding-id delta: closed={sorted(before_ids - after_ids)} "
-                f"new={sorted(after_ids - before_ids)}"
-            )
+        after = self._suite(target, python, notes, "after")
+        broken = preserved(before, after) if before is not None else None
+        if broken is not None:
+            _restore(target, snapshot)
+            proposal.status = TransformationStatus.REJECTED
+            return _stopped(common, notes, "REJECT",
+                            f"Rule 7: {broken}. The change was put back.",
+                            proposal, suite_before=before, suite_after=after)
 
+        reobserved = self._reinspect(target, observed, python, notes)
         attack = attack_documentation_honesty(target, ground)
         critic_after = self.critic.critique(target)
-        if attack.judgement == "REJECT":
-            decision = "REJECT"
-        elif attack.judgement == "INCONCLUSIVE":
-            decision = "INCONCLUSIVE"
-        elif not critic_after.good_enough:
-            decision = "REJECT"
-            notes.append("Oracle accepted test-count honesty; critic still says this isn't good enough yet.")
-        else:
-            decision = "ACCEPT"
-
         return TagTeamResult(
-            target=str(target),
-            baseline=ground.readme_sha16,
-            observed=observed,
-            proposal=proposal,
-            applied=True,
-            reobserved=reobserved,
-            attack=attack,
-            critic_before=critic_before,
-            critic_after=critic_after,
-            decision=decision,
-            notes=tuple(notes),
-            swizzle_sound=swizzle_sound,
+            **common, proposal=proposal, applied=True, reobserved=reobserved, attack=attack,
+            critic_after=critic_after, decision=_decide(attack, critic_after, notes),
+            notes=tuple(notes), suite_before=before, suite_after=after,
         )
+
+    # -- steps ------------------------------------------------------------
+
+    def _calibrate(self, python: str, notes: list[str]) -> Optional[bool]:
+        """SWIZZLE's instrument check: are its own planted defects still real?"""
+        if self.swizzle_root is None:
+            notes.append("SWIZZLE proofs NOT RUN: no swizzle_root. The adversary is uncalibrated.")
+            return None
+        sound, summary = swizzle_proofs_hold(swizzle_root=self.swizzle_root, python=python)
+        notes.append(summary)
+        return sound
+
+    def _observe(self, target: Path, findings: Optional[Sequence[dict]], python: str,
+                 notes: list[str]) -> tuple[Defect, ...]:
+        if findings is not None:
+            observed = defects_from_ghost(findings)
+            notes.append(f"Ghost Tools findings loaded ({len(observed)}), not scanned in this process.")
+            return observed
+        if self.ghost_tools_root is None:
+            notes.append("Ghost Tools scan SKIPPED: no ghost_tools_root. Observation is UNKNOWN.")
+            return ()
+        observed = defects_from_ghost(
+            ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python))
+        notes.append(f"Ghost Tools observed {len(observed)} finding(s).")
+        return observed
+
+    def _suite(self, target: Path, python: str, notes: list[str], when: str) -> Optional[SuiteRun]:
+        if not self.run_tests:
+            if when == "before":
+                notes.append("Rule 7 NOT RUN: run_tests=False. Behavior preservation is unmeasured.")
+            return None
+        result = run_suite(target, python)
+        notes.append(f"Rule 7 suite {when}: {result.describe()}.")
+        return result
+
+    def _reinspect(self, target: Path, observed: tuple[Defect, ...], python: str,
+                   notes: list[str]) -> tuple[Defect, ...]:
+        if self.ghost_tools_root is None:
+            return ()
+        reobserved = defects_from_ghost(
+            ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python))
+        notes.append(f"Ghost Tools re-inspected: {len(reobserved)} finding(s).")
+        before_ids = {d.ghost_id for d in observed if d.ghost_id}
+        after_ids = {d.ghost_id for d in reobserved if d.ghost_id}
+        notes.append(f"finding-id delta: closed={sorted(before_ids - after_ids)} "
+                     f"new={sorted(after_ids - before_ids)}")
+        return reobserved
+
+
+def _refuse_self_authorization(target: Path, authorization: Optional[Authorization]) -> None:
+    """Elegant may transform other repos. Transforming itself under its own
+    proposal is the self-certifying loop."""
+    if (target.name.lower() == "elegant" and authorization and authorization.granted
+            and authorization.actor.lower() in {"elegant", "self"}):
+        raise Unauthorized("Elegant cannot authorize work on itself.")
+
+
+def _stopped(common: dict, notes: list[str], decision: str, reason: str,
+             proposal: Optional[Transformation] = None, **suites) -> TagTeamResult:
+    """A run that ends without an accepted write: one shape, one stated reason."""
+    return TagTeamResult(**common, proposal=proposal, applied=False, reobserved=(), attack=None,
+                         critic_after=None, decision=decision, notes=tuple(notes + [reason]),
+                         **suites)
+
+
+def _decide(attack: AttackResult, critic_after: CriticReport, notes: list[str]) -> str:
+    if attack.judgement in {"REJECT", "INCONCLUSIVE"}:
+        return attack.judgement
+    if not critic_after.good_enough:
+        notes.append("Oracle accepted test-count honesty; critic still says this isn't good enough yet.")
+        return "REJECT"
+    return "ACCEPT"
+
+
+def _snapshot(target: Path, proposal: Transformation) -> Dict[str, Optional[str]]:
+    """Each file the proposal touches, as it is now (None: it does not exist yet)."""
+    out: Dict[str, Optional[str]] = {}
+    for edit in proposal.edits:
+        path = target / edit.path
+        out[edit.path] = path.read_text(encoding="utf-8") if path.is_file() else None
+    return out
+
+
+def _restore(target: Path, snapshot: Dict[str, Optional[str]]) -> None:
+    for rel, text in snapshot.items():
+        path = target / rel
+        if text is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(text, encoding="utf-8")

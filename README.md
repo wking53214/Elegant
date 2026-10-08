@@ -15,7 +15,7 @@ Elegant owns the *story the source tells* and the *proposal to make that story
 true*. Ghost Tools owns forensic observation. SWIZZLE owns adversarial
 challenge. CNS owns interoperability contracts and is never modified here.
 
-Version `0.2.0`. Stdlib only. Python ≥ 3.11 declared. The first campaign ran
+Version `0.3.0`. Stdlib only. Python ≥ 3.11 declared. The first campaign ran
 the suite on CPython 3.10.21 because that is what its sandbox had; since
 2026-10-07 it also runs on CPython 3.13 locally and on 3.11 and 3.12 in CI.
 
@@ -56,9 +56,15 @@ GHOST TOOLS   observe / find     (findings keep ghost-* identity)
 SWIZZLE       swizzle prove: its own proofs must hold, or nothing is written
    │
    ▼
+TARGET SUITE  must be green before the change (Rule 7)
+   │
+   ▼
 ELEGANT       propose / transform
    │              ▲
    │              └── human Authorization.granted == True
+   ▼
+TARGET SUITE  still green after, or the change is put back (Rule 7)
+   │
    ▼
 GHOST TOOLS   re-inspect
    │
@@ -81,8 +87,10 @@ ACCEPT / REJECT
 | `elegant.tagteam` | the loop |
 | `elegant.cns_boundary` | recommendation; `cns_modified` is always `NO` |
 | `elegant.proposers` | documentation-honesty proposer |
-| `elegant.cli` | `inspect` `critic` `tagteam` `cns` |
+| `elegant.cli` | `inspect` `critic` `tagteam` `audit` `readme` `cns` |
 | `elegant.registry` | campaign record; the current one is `docs/REGISTRY.json` |
+| `elegant.suite` | Rule 7: runs the target's own test suite before and after a change |
+| `elegant.audit` | Rules 5 and 9: `ELEGANT_AUDIT.md`, Ghost findings under IDs that never change meaning |
 | `elegant.horsemen` | Four Horsemen interface (v0.2.0): typed handoffs between TOUCHSTONE, Ghost Tools, SWIZZLE and Elegant, scoped grants, receipts. `TouchstoneAdapter` reads TOUCHSTONE's `touchstone_production/registry.json` and raises `TouchstoneUnavailable` rather than return no specimens |
 
 ## KEY INTERNAL CONCEPTS
@@ -111,6 +119,23 @@ is applied, re-inspected and attacked. If SWIZZLE's own proofs do not hold,
 nothing is written and the command exits 2. Without `--swizzle-root` the notes
 say `SWIZZLE proofs NOT RUN` and the adversary is uncalibrated.
 
+Rule 7 is enforced on every authorized write: the target's own suite
+(`pytest`, in the target's directory, with its own configuration) must be
+green before the change, or nothing is written; after the change it must have
+no new failures and at least as many passes, or the change is put back and the
+decision is `REJECT`. Both counts are in the output. Running a repository's
+tests runs its code, which is why this happens only after a human grant.
+
+`elegant audit PATH --ghost-root GHOST_TOOLS` prints `ELEGANT_AUDIT.md` with
+every Ghost finding under a C/H/M/L ID. Run it again later and existing IDs
+keep their meaning, new findings get new numbers, and a finding that left the
+scan keeps its row. With `--authorize ACTOR --reason TEXT` it writes the file.
+Only the table between its markers is Elegant's; every other section is the
+author's and survives reruns untouched.
+
+`elegant readme PATH` prints a README draft compiled from the source
+narrative. It never writes.
+
 ## WHAT WORKS
 
 - Transformation apply refuses without a grant. **VERIFIED** by `tests/test_authorization.py` (executed this campaign).
@@ -124,7 +149,11 @@ say `SWIZZLE proofs NOT RUN` and the adversary is uncalibrated.
 - SWIZZLE's proofs failing stops the write and blocks ACCEPT; not configuring SWIZZLE is said out loud. **VERIFIED** by `tests/test_tagteam.py`.
 - The whole loop, live, once (2026-10-07): SWIZZLE 12 of 12 proofs, Ghost Tools observe and re-inspect, an authorized documentation-honesty change, oracle ACCEPT. On a scratch demo, not a corpus repository; recorded in `docs/REGISTRY.json`.
 
-24 tests exist in this tree. All 24 passed on CPython 3.13 with `TOUCHSTONE_ROOT` set; without it the live TOUCHSTONE test skips and says why. CI (3.11, 3.12) runs all 24.
+- A change that breaks the target's suite is put back; a red or empty suite means nothing is written. **VERIFIED** by `tests/test_rule7_suite_gate.py`.
+- Audit IDs survive reruns, are never reused, and a Fixed defect that returns is reopened under its own ID. **VERIFIED** by `tests/test_audit.py`.
+- The documentation-honesty rewrite replaces the whole false sentence with one clean one ("The tree contains 2 `test_*` functions (an earlier version of this document gave 16)."). **VERIFIED** by `tests/test_tagteam.py`.
+
+37 tests exist in this tree. All 37 passed on CPython 3.13 with `TOUCHSTONE_ROOT` set; without it the live TOUCHSTONE test skips and says why. CI (3.11, 3.12) runs all of them.
 
 ## WHAT IS BEAUTIFUL
 
@@ -150,9 +179,13 @@ Ghost Tools integration in production CI, or of SWIZZLE's own catalogue.
 
 ## WHAT DOES NOT WORK
 
-- There is no automatic source refactorer for long functions. That is
-  **INTENTIONALLY NOT PROVIDED** in v0.1.0: the first proposer is
-  documentation honesty.
+- Elegant does not rename identifiers, write narrative comments into source,
+  insert guards, or split long functions (Elegant.md Rules 1 to 4 and
+  principles A to C). Those need a judgement about intent that the tree does
+  not contain. **INTENTIONALLY NOT PROVIDED**: the only proposer is
+  documentation honesty. Rule 7 now guards whatever proposer is added next.
+- `ELEGANT_AUDIT.md`'s design analogy, layer map and invariants are written
+  by a person; Elegant leaves them `UNKNOWN` rather than invent them.
 - Beauty is not scored. Asking for a score is asking for the wrong tool.
 
 ## WHAT IS STILL UGLY
@@ -171,9 +204,15 @@ Ghost Tools integration in production CI, or of SWIZZLE's own catalogue.
   stood in this README for a week after the suite grew past them, and the
   critic flagged an illustrative example sentence instead. Found 2026-10-07 by
   running `elegant critic .` on this repository.
-- The documentation-honesty proposer rewrites the number and keeps the rest of
-  the sentence, so the result can read badly ("... unmodified on the system
-  python3" after a new clause). Seen in the registry run.
+- Fixed in 0.3.0: the documentation-honesty proposer kept the tail of the old
+  sentence and produced text like "... (historical claim of 16 ...)
+  unmodified on the system python3." It replaces the whole sentence now.
+- Fixed in 0.3.0: on Python 3.11, the declared minimum, `elegant.cli` did not
+  import at all (an f-string in `elegant.readme` used 3.12-only quoting). No
+  test imported the CLI until `tests/test_audit.py`, so CI never saw it.
+- Fixed in 0.3.0: the Rule 7 gate's first version let a breaking edit pass when
+  it landed within a second of the "before" run (Python reused stale
+  bytecode). Each suite run now gets its own bytecode cache.
 - Ghost Tools does not flag a documented count larger than the suite:
   `doc_test_count_drift` only reports a count the suite has grown past. In the
   registry run the critic found the false claim and Ghost Tools did not.
@@ -205,8 +244,8 @@ Here is where those disagree: the README describes a corpus campaign; this
 package is the *instrument*. The campaign's GitHub SHAs, live Ghost scans, and
 SWIZZLE attacks are evidence *outside* this repository and must be recorded
 in the registry (`docs/REGISTRY.json`), not implied by this file. As of
-2026-10-07 the registry holds one row, the scratch run, and no corpus
-repository.
+2026-10-07 the registry holds two rows, both scratch runs (the second with
+the Rule 7 gate), and no corpus repository.
 
 Critic (self): `elegant critic .` on 2026-10-07, after this revision: "The
 artifact's story is consistent with what this inspection could count." Before
