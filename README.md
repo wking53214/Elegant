@@ -15,9 +15,9 @@ Elegant owns the *story the source tells* and the *proposal to make that story
 true*. Ghost Tools owns forensic observation. SWIZZLE owns adversarial
 challenge. CNS owns interoperability contracts and is never modified here.
 
-Version `0.1.0`. Stdlib only. Python ≥ 3.11 declared; the suite in this campaign
-was executed on CPython 3.10.21 because that is what the sandbox had with
-pytest. That interpreter difference is recorded, not papered over.
+Version `0.2.0`. Stdlib only. Python ≥ 3.11 declared. The first campaign ran
+the suite on CPython 3.10.21 because that is what its sandbox had; since
+2026-10-07 it also runs on CPython 3.13 locally and on 3.11 and 3.12 in CI.
 
 ## WHY IT EXISTS
 
@@ -53,6 +53,9 @@ CODEBASE
 GHOST TOOLS   observe / find     (findings keep ghost-* identity)
    │
    ▼
+SWIZZLE       swizzle prove: its own proofs must hold, or nothing is written
+   │
+   ▼
 ELEGANT       propose / transform
    │              ▲
    │              └── human Authorization.granted == True
@@ -79,7 +82,8 @@ ACCEPT / REJECT
 | `elegant.cns_boundary` | recommendation; `cns_modified` is always `NO` |
 | `elegant.proposers` | documentation-honesty proposer |
 | `elegant.cli` | `inspect` `critic` `tagteam` `cns` |
-| `elegant.registry` | campaign record |
+| `elegant.registry` | campaign record; the current one is `docs/REGISTRY.json` |
+| `elegant.horsemen` | Four Horsemen interface (v0.2.0): typed handoffs between TOUCHSTONE, Ghost Tools, SWIZZLE and Elegant, scoped grants, receipts. `TouchstoneAdapter` reads TOUCHSTONE's `touchstone_production/registry.json` and raises `TouchstoneUnavailable` rather than return no specimens |
 
 ## KEY INTERNAL CONCEPTS
 
@@ -100,16 +104,27 @@ Native digest ≠ CNS digest unless canonicalization is shown.
 CLI over a git work tree. Default is read-only. Writes require
 `--authorize ACTOR --reason TEXT`.
 
+`elegant tagteam PATH --ghost-root GHOST_TOOLS --swizzle-root SWIZZLE` runs the
+whole loop. The documentation-honesty proposer is wired in, so without
+`--authorize` it proposes and writes nothing (`REFUSED`); with it, the change
+is applied, re-inspected and attacked. If SWIZZLE's own proofs do not hold,
+nothing is written and the command exits 2. Without `--swizzle-root` the notes
+say `SWIZZLE proofs NOT RUN` and the adversary is uncalibrated.
+
 ## WHAT WORKS
 
 - Transformation apply refuses without a grant. **VERIFIED** by `tests/test_authorization.py` (executed this campaign).
 - Ghost IDs are preserved. **VERIFIED** by `tests/test_ghost_identity.py`.
-- A README that claims 16 tests when the tree has 2 is not good enough. **VERIFIED** by `tests/test_critic.py`.
+- A README whose test count disagrees with the tree is not good enough. **VERIFIED** by `tests/test_critic.py`.
 - Tag team without auth does not write. **VERIFIED** by `tests/test_tagteam.py`.
 - Documentation-honesty oracle does not import the critic. **VERIFIED** by `tests/test_swizzle_independence.py`.
 - CNS analysis of an unrelated tree writes nothing and recommends `no_action`. **VERIFIED** by `tests/test_cns_readonly.py`.
 
-Executed this campaign: **15 passed** (`python3 -m pytest -q` in this repository, CPython 3.10.21).
+- TOUCHSTONE's answer key arrives, or the run says why it did not: no root, missing, empty or broken registry all raise. **VERIFIED** by `tests/test_touchstone_link.py`, including a live read of TOUCHSTONE when `TOUCHSTONE_ROOT` is set (CI sets it).
+- SWIZZLE's proofs failing stops the write and blocks ACCEPT; not configuring SWIZZLE is said out loud. **VERIFIED** by `tests/test_tagteam.py`.
+- The whole loop, live, once (2026-10-07): SWIZZLE 12 of 12 proofs, Ghost Tools observe and re-inspect, an authorized documentation-honesty change, oracle ACCEPT. On a scratch demo, not a corpus repository; recorded in `docs/REGISTRY.json`.
+
+24 tests exist in this tree. All 24 passed on CPython 3.13 with `TOUCHSTONE_ROOT` set; without it the live TOUCHSTONE test skips and says why. CI (3.11, 3.12) runs all 24.
 
 ## WHAT IS BEAUTIFUL
 
@@ -123,15 +138,14 @@ CNS analysis beyond reading the target tree.
 
 ## WHAT IS PROVEN
 
-The 15 tests named above, on one interpreter, this run. That is not a proof
-of the whole architecture, of Ghost Tools integration in production CI, or
-of SWIZZLE's own catalogue.
+The tests named above, on three interpreters, and one live run of the loop on
+a scratch repository. That is not a proof of the whole architecture, of
+Ghost Tools integration in production CI, or of SWIZZLE's own catalogue.
 
 ## WHAT IS NOT PROVEN
 
-- Live `ghost-buster` + `elegant tagteam` + `swizzle prove` on every corpus repo
+- Live `ghost-buster` + `elegant tagteam` + `swizzle prove` on any corpus repo. It has run once, on a scratch demo
 - That a README rewrite preserves every reader-visible contract
-- That CPython 3.11/3.12 CI has run (the workflow file is **IMPLEMENTED**, not **VERIFIED** here)
 - Transfer of the museum test to repositories Elegant has not transformed
 
 ## WHAT DOES NOT WORK
@@ -152,9 +166,17 @@ of SWIZZLE's own catalogue.
 
 ## KNOWN DEFECTS
 
-None filed against this tree at first publication. The poetry critic, pointed
-at Elegant itself after this README is written, is the next inspection — not
-this paragraph claiming the inspection already happened.
+- The critic reads test counts only in two shapes ("N tests passed / exist /
+  in this", "claims N test"). "**15 passed**" and "The 15 tests named above"
+  stood in this README for a week after the suite grew past them, and the
+  critic flagged an illustrative example sentence instead. Found 2026-10-07 by
+  running `elegant critic .` on this repository.
+- The documentation-honesty proposer rewrites the number and keeps the rest of
+  the sentence, so the result can read badly ("... unmodified on the system
+  python3" after a new clause). Seen in the registry run.
+- Ghost Tools does not flag a documented count larger than the suite:
+  `doc_test_count_drift` only reports a count the suite has grown past. In the
+  registry run the critic found the false claim and Ghost Tools did not.
 
 ## ARCHITECTURAL DEBT
 
@@ -173,14 +195,20 @@ understands more than test counts and archival language.
 Here is what the artifact says it is: an architectural-transparency system
 that will not write without a human grant.
 
-Here is what we can establish: 15 executed tests, on one interpreter, covering
+Here is what we can establish: the executed suite (see WHAT WORKS) covering
 that refusal, identity preservation, critic honesty, tag-team refusal-to-write,
-oracle independence, and CNS non-modification of an unrelated tree.
+oracle independence, CNS non-modification of an unrelated tree, the loud
+TOUCHSTONE link and the SWIZZLE proof gate; plus one live run of the whole
+loop on a scratch repository.
 
 Here is where those disagree: the README describes a corpus campaign; this
 package is the *instrument*. The campaign's GitHub SHAs, live Ghost scans, and
 SWIZZLE attacks are evidence *outside* this repository and must be recorded
-in the registry, not implied by this file.
+in the registry (`docs/REGISTRY.json`), not implied by this file. As of
+2026-10-07 the registry holds one row, the scratch run, and no corpus
+repository.
 
-Critic (self, after this README exists): run `elegant critic .` rather than
-trust this sentence.
+Critic (self): `elegant critic .` on 2026-10-07, after this revision: "The
+artifact's story is consistent with what this inspection could count." Before
+it, the same command said "This isn't good enough yet." Run it again rather
+than trust this sentence.
