@@ -51,8 +51,9 @@ class StuckProposer:
 
 class FakeFinisher:
     def __init__(self, path="README.md", new_text="final\n"):
-        self.path, self.new_text, self.calls = path, new_text, 0
+        self.path, self.new_text, self.calls, self.facts = path, new_text, 0, None
 
-    def finish(self, target, baseline):
+    def finish(self, target, baseline, facts):
         self.calls += 1
+        self.facts = facts
         return _transformation(target, (), baseline, self.path, self.new_text)

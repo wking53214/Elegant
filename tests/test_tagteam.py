@@ -91,3 +91,14 @@ def test_a_finisher_that_breaks_the_suite_is_put_back_but_the_loop_result_stands
     assert result.decision == "FINISH_REJECTED" and result.converged and not result.finished
     assert _read(tmp_path, "tests/test_x.py") == "def test_a():\n    assert True\n"
     assert _read(tmp_path, "NOTE.md") == "kept\n"
+
+
+def test_the_finisher_is_handed_the_measured_facts(tmp_path: Path):
+    _tree(tmp_path)
+    finisher = FakeFinisher()
+    findings = [{"id": "ghost-1", "severity": "minor", "status": "confirmed", "summary": "left over"}]
+    TagTeam(proposer=FakeProposer(steps=()), finisher=finisher).run(
+        tmp_path, findings=findings, authorization=_auth(tmp_path))
+    assert finisher.facts.suite.green and finisher.facts.suite.passed == 1
+    assert [d.ghost_id for d in finisher.facts.remaining] == ["ghost-1"]
+    assert finisher.facts.cycles == 0

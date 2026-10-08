@@ -33,7 +33,7 @@ from typing import Dict, Optional, Sequence
 from .authorization import Authorization, Unauthorized
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
-from .roles import Finisher, Proposer
+from .roles import Facts, Finisher, Proposer
 from .suite import SuiteRun, preserved, run_suite
 from .swizzle import swizzle_proofs_hold
 
@@ -177,7 +177,9 @@ class TagTeam:
         if self.finisher is None:
             return stop("ACCEPT", "Loop converged. No finisher configured.", cycles, converged=True)
 
-        finish = self.finisher.finish(target, _fingerprint(target))
+        facts = Facts(suite=self._suite(target, python, notes, "converged"),
+                      remaining=observed, cycles=len([c for c in cycles if c.applied]))
+        finish = self.finisher.finish(target, _fingerprint(target), facts)
         if finish is None or not finish.edits:
             return stop("ACCEPT", "Loop converged. The Finisher had nothing to finish.",
                         cycles, converged=True)
