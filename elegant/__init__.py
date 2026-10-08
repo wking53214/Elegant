@@ -1,42 +1,38 @@
-"""Elegant: architectural transparency for a specialized corpus.
+"""Elegant: the discipline of change.
 
 WHAT THIS IS
-    A software-writing system. The source is the primary artifact. Documentation
-    is architectural infrastructure, not a coat of paint.
+    The governor of a code change. It decides whether a change may be made,
+    whether it stands, and what is recorded. It does not decide what makes code
+    beautiful; that is Streamline's work, and it reaches Elegant through the
+    `Craft` interface in `elegant.craft`.
 
 WHAT IT OWNS
-    Transformation proposals, the poetry critic, README compilation from
-    source narrative, the human authorization boundary, and the tag-team
-    orchestration that *calls* Ghost Tools and SWIZZLE without becoming them.
+    Transformation proposals as data, the human authorization boundary, the
+    Rule 7 test gate, the Rule 9 audit file, the SWIZZLE proof gate, and the
+    tag-team loop that *calls* Ghost Tools, SWIZZLE and a craft without
+    becoming any of them.
 
 WHAT IT DOES NOT OWN
-    Forensic inspection (Ghost Tools). Adversarial challenge (SWIZZLE).
-    Runtime governance contracts (CNS). Live admission, decision, custody.
+    The opinion about better code (Streamline). Forensic inspection (Ghost
+    Tools). Adversarial challenge (SWIZZLE). Runtime governance contracts
+    (CNS). Live admission, decision, custody.
 
 WHAT IT MUST NEVER DO
     Silently alter code.
-    Score beauty.
     Certify itself.
     Modify CNS.
     Convert UNKNOWN into APPROVED.
-    Claim a test passed that was not executed.
-    Hide a defect under better prose.
-
-The museum test: a competent programmer should be able to read the source
-and understand the conceptual architecture without having to execute every
-pathway merely to discover what the code is trying to do. Execution still
-determines whether the architectural story is true.
+    Let a craft's good opinion outvote a red suite or a missing grant.
 """
 
 from .epistemic import EpistemicState
 from .models import Defect, DefectLifecycle, Transformation, TransformationStatus
 from .authorization import Authorization, Unauthorized
-from .critic import PoetryCritic, CriticReport
-from .narrative import Narrative, inspect_tree
+from .craft import AttackResult, Craft, Review
 from .tagteam import TagTeam, TagTeamResult
 from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "EpistemicState",
@@ -46,10 +42,9 @@ __all__ = [
     "TransformationStatus",
     "Authorization",
     "Unauthorized",
-    "PoetryCritic",
-    "CriticReport",
-    "Narrative",
-    "inspect_tree",
+    "AttackResult",
+    "Craft",
+    "Review",
     "TagTeam",
     "TagTeamResult",
     "HorsemenWorkflow",

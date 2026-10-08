@@ -1,24 +1,23 @@
-"""elegant — inspect, criticise, propose, apply, tag-team.
+"""elegant — govern a change: observe, authorize, gate on the suite, record.
 
-Writes require --authorize ACTOR --reason TEXT. There is no default actor.
+Elegant does not decide what better means. A craft does (see `elegant.craft`),
+and `tagteam --craft MODULE:FACTORY` names which one. Without a craft the loop
+can only observe. Writes require --authorize ACTOR --reason TEXT. There is no
+default actor.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
 
 from . import __version__
 from .authorization import Unauthorized, grant
-from .cns_boundary import analyse as cns_analyse, to_dict as cns_to_dict
-from .critic import PoetryCritic
 from . import audit as audit_file
 from .ghost import load_findings, scan as ghost_scan
-from .narrative import inspect_tree
-from .readme import compile_readme
-from .proposers import documentation_honesty_proposer
 from .tagteam import TagTeam
 
 
@@ -27,15 +26,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"elegant {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_ins = sub.add_parser("inspect", help="extract the architectural narrative")
-    p_ins.add_argument("path", type=Path)
-
-    p_c = sub.add_parser("critic", help="poetry critic: claims vs the tree")
-    p_c.add_argument("path", type=Path)
-
-    p_t = sub.add_parser("tagteam", help="observe → (optional) propose/apply → re-inspect → attack")
+    p_t = sub.add_parser("tagteam", help="observe → propose/apply (needs a craft) → re-inspect → attack")
     p_t.add_argument("path", type=Path)
     p_t.add_argument("--ghost-root", type=Path, default=None)
+    p_t.add_argument("--craft", default=None, metavar="MODULE:FACTORY",
+                     help="who decides what better means, e.g. streamline.craft:Streamline")
     p_t.add_argument("--swizzle-root", type=Path, default=None,
                      help="SWIZZLE checkout; its proofs must hold before anything is ACCEPTed")
     p_t.add_argument("--from-ghost", type=Path, default=None, help="findings JSON instead of a live scan")
@@ -51,41 +46,9 @@ def main(argv: list[str] | None = None) -> int:
                      help="write the file; without it the result is printed and nothing is written")
     p_a.add_argument("--reason", default="")
 
-    p_r = sub.add_parser("readme", help="compile a README draft from the source narrative (prints only)")
-    p_r.add_argument("path", type=Path)
-
-    p_cns = sub.add_parser("cns", help="CNS interoperability recommendation (never modifies CNS)")
-    p_cns.add_argument("path", type=Path)
-
     args = parser.parse_args(argv)
-    if args.command == "inspect":
-        nar = inspect_tree(args.path)
-        print(json.dumps({
-            "name": nar.name,
-            "version": nar.version,
-            "test_functions": nar.test_functions,
-            "test_files": list(nar.test_files),
-            "cns_mentioned": nar.cns_mentioned,
-            "readme_exists": nar.readme_exists,
-            "modules": [
-                {"path": m.path, "purpose": m.purpose, "classes": list(m.classes)}
-                for m in nar.modules
-            ],
-        }, indent=2))
-        return 0
-    if args.command == "critic":
-        report = PoetryCritic().critique(args.path)
-        print(report.as_markdown())
-        return 0 if report.good_enough else 1
     if args.command == "audit":
         return _audit(args)
-    if args.command == "readme":
-        nar = inspect_tree(args.path)
-        print(compile_readme(nar, PoetryCritic().critique(args.path, nar)))
-        return 0
-    if args.command == "cns":
-        print(json.dumps(cns_to_dict(cns_analyse(args.path)), indent=2))
-        return 0
     if args.command == "tagteam":
         return _tagteam(args)
     return 2
@@ -102,12 +65,12 @@ def _tagteam(args) -> int:
         except Unauthorized as e:
             print(f"elegant: {e}", file=sys.stderr)
             return 2
-    # The documentation-honesty proposer is v0.1.0's one proposer. Without
-    # it the CLI loop could only ever observe: every run ended
-    # INCONCLUSIVE ("No proposer") and nothing reached SWIZZLE. It still
-    # writes nothing unless --authorize is given.
-    team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
-                   proposer=documentation_honesty_proposer)
+    try:
+        craft = _load_craft(args.craft)
+    except (ImportError, AttributeError, ValueError) as e:
+        print(f"elegant: cannot load craft {args.craft!r}: {e}", file=sys.stderr)
+        return 2
+    team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root, craft=craft)
     result = team.run(args.path, authorization=auth, findings=findings)
     payload = {
         "decision": result.decision,
@@ -119,8 +82,8 @@ def _tagteam(args) -> int:
             "violations": list(result.attack.violations),
             "notes": result.attack.notes,
         },
-        "critic_before": result.critic_before.verdict,
-        "critic_after": None if result.critic_after is None else result.critic_after.verdict,
+        "review_before": None if result.review_before is None else result.review_before.verdict,
+        "review_after": None if result.review_after is None else result.review_after.verdict,
         "swizzle_sound": result.swizzle_sound,
         "suite_before": None if result.suite_before is None else result.suite_before.describe(),
         "suite_after": None if result.suite_after is None else result.suite_after.describe(),
@@ -130,6 +93,16 @@ def _tagteam(args) -> int:
         print("elegant: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
         return 2
     return 0 if result.decision in {"ACCEPT", "INCONCLUSIVE", "REFUSED"} else 1
+
+
+def _load_craft(spec):
+    """The craft named as MODULE:FACTORY, built with no arguments; None if not named."""
+    if not spec:
+        return None
+    module_name, _, attr = spec.partition(":")
+    if not module_name or not attr:
+        raise ValueError("expected MODULE:FACTORY")
+    return getattr(importlib.import_module(module_name), attr)()
 
 
 def _audit(args) -> int:
