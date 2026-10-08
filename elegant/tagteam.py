@@ -1,44 +1,56 @@
-"""Ghost Tools × Elegant × SWIZZLE tag team: the discipline of change.
-
-Conceptual order (implemented as this module):
+"""The loop: Ghost sees, Proposer proposes, Elegant decides and applies, SWIZZLE checks.
 
     calibrate (SWIZZLE proves its own instrument)
-        → observe (Ghost) → propose (a craft) → authorize (human)
-        → suite before (Rule 7) → transform → suite after (Rule 7)
-        → re-inspect (Ghost) → attack (the craft's independent oracle)
-        → ACCEPT / REJECT
+    repeat, up to max_cycles:
+        observe (Ghost) -> Proposer proposes -> authorize (human)
+        -> suite before -> apply -> suite after (put back on failure)
+        -> Ghost re-inspects
+      until the Proposer has nothing left to propose
+    SWIZZLE proofs again
+    hand off ONCE to the Finisher: beautified code and the final README,
+      applied by Elegant under the same gate and put back if the suite
+      breaks or Ghost finds anything new
 
-What counts as better is not decided here. A craft (see `elegant.craft`;
-Streamline is the one that exists) answers freeze, review, propose and attack.
-This module decides only whether a change may be made and whether it stands.
-
-Every stop before the write returns the same shape through `_stopped`, so
-the reason a run ended is always one sentence in the notes and nothing is
-written. A change that breaks the target's suite is put back.
+Elegant is the only writer and the only one who says the loop is done. The
+Proposer cannot declare itself finished; it can only run out of proposals, and
+Elegant checks that Ghost agrees before calling it converged.
 
 This module refuses three self-certifying loops:
 
     Elegant says Elegant is good.
     Ghost Tools finds its own work correct merely because it produced it.
     SWIZZLE trusts the transformation framework without independent challenge.
-
-A craft's own reviewer and its attack oracle are separate questions asked
-separately; a good review never outvotes a failed suite or a failed attack.
 """
 
 from __future__ import annotations
 
+import hashlib
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
 from .authorization import Authorization, Unauthorized
-from .craft import AttackResult, Craft, Review
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
+from .roles import Finisher, Proposer
 from .suite import SuiteRun, preserved, run_suite
 from .swizzle import swizzle_proofs_hold
+
+DEFAULT_MAX_CYCLES = 10
+
+
+@dataclass
+class Cycle:
+    """One turn of the loop: what was proposed and whether it stood."""
+
+    number: int
+    observed: int
+    proposal: Optional[Transformation]
+    applied: bool
+    outcome: str  # APPLIED / PUT_BACK / NOTHING_TO_PROPOSE / REFUSED / SUITE_RED
+    suite_before: Optional[SuiteRun] = None
+    suite_after: Optional[SuiteRun] = None
 
 
 @dataclass
@@ -46,20 +58,30 @@ class TagTeamResult:
     target: str
     baseline: str
     observed: tuple[Defect, ...]
-    proposal: Optional[Transformation]
-    applied: bool
     reobserved: tuple[Defect, ...]
-    attack: Optional[AttackResult]
-    review_before: Optional[Review]
-    review_after: Optional[Review]
-    decision: str  # ACCEPT / REJECT / REFUSED / INCONCLUSIVE
+    cycles: tuple[Cycle, ...]
+    converged: bool
+    #: ACCEPT / FINISH_REJECTED / NOT_CONVERGED / REJECT / REFUSED / INCONCLUSIVE
+    decision: str
     notes: tuple[str, ...]
-    #: True: SWIZZLE's proofs held. False: they did not (no write happens).
-    #: None: SWIZZLE was not configured, which the notes say out loud.
+    finish: Optional[Transformation] = None
+    finished: bool = False
+    #: True: SWIZZLE's proofs held. False: they did not. None: not configured.
     swizzle_sound: Optional[bool] = None
-    #: Rule 7: the target's suite before and after the change, as measured.
-    suite_before: Optional[SuiteRun] = None
-    suite_after: Optional[SuiteRun] = None
+
+    @property
+    def suite_before(self) -> Optional[SuiteRun]:
+        """The target's suite before the first cycle that measured it."""
+        return next((c.suite_before for c in self.cycles if c.suite_before is not None), None)
+
+    @property
+    def suite_after(self) -> Optional[SuiteRun]:
+        """The suite after the last cycle that measured it."""
+        return next((c.suite_after for c in reversed(self.cycles) if c.suite_after is not None), None)
+
+    @property
+    def applied(self) -> bool:
+        return any(c.applied for c in self.cycles) or self.finished
 
 
 class TagTeam:
@@ -68,12 +90,16 @@ class TagTeam:
         *,
         ghost_tools_root: Optional[Path] = None,
         swizzle_root: Optional[Path] = None,
-        craft: Optional[Craft] = None,
+        proposer: Optional[Proposer] = None,
+        finisher: Optional[Finisher] = None,
+        max_cycles: int = DEFAULT_MAX_CYCLES,
         run_tests: bool = True,
     ) -> None:
         self.ghost_tools_root = ghost_tools_root
         self.swizzle_root = swizzle_root
-        self.craft = craft
+        self.proposer = proposer
+        self.finisher = finisher
+        self.max_cycles = max_cycles
         #: Rule 7. Off only for callers that measure the suite some other way;
         #: the notes say so when it is off.
         self.run_tests = run_tests
@@ -90,61 +116,108 @@ class TagTeam:
         python = python or sys.executable
         _refuse_self_authorization(target, authorization)
         notes: list[str] = []
-        swizzle_sound = self._calibrate(python, notes)
+        sound = self._calibrate(python, notes)
         observed = self._observe(target, findings, python, notes)
-        craft = self.craft
-        if craft is None:
-            common = dict(target=str(target), baseline="UNKNOWN", observed=observed,
-                          review_before=None, swizzle_sound=swizzle_sound)
-            return _stopped(common, notes, "INCONCLUSIVE",
-                            "No craft. Tag team observed only; nothing can be proposed.")
-        ground = craft.freeze(target)
-        common = dict(target=str(target), baseline=ground.fingerprint, observed=observed,
-                      review_before=craft.review(target), swizzle_sound=swizzle_sound)
-        proposal = craft.propose(target, observed, ground)
-        if authorization is None or not authorization.granted:
-            proposal.status = TransformationStatus.PROPOSED
-            return _stopped(common, notes, "REFUSED",
-                            "Human authorization missing. Proposal stands. No write.", proposal)
-        if swizzle_sound is False:
-            # An adversary whose own proofs fail cannot judge the change
-            # afterwards, so the change is not made.
-            proposal.status = TransformationStatus.PROPOSED
-            return _stopped(common, notes, "INCONCLUSIVE",
-                            "SWIZZLE's own proofs do not hold; nothing was written.", proposal)
+        first = observed
+        base0 = _fingerprint(target)
 
-        before = self._suite(target, python, notes, "before")
+        def stop(decision: str, why: str, cycles=(), converged=False, current=None,
+                 finish=None, finished=False) -> TagTeamResult:
+            return TagTeamResult(
+                target=str(target), baseline=base0, observed=first,
+                reobserved=observed if current is None else current, cycles=tuple(cycles),
+                converged=converged, decision=decision, notes=tuple(notes + [why]),
+                finish=finish, finished=finished, swizzle_sound=sound)
+
+        if self.proposer is None:
+            return stop("INCONCLUSIVE", "No proposer. Tag team observed only; nothing can be proposed.")
+        if authorization is None or not authorization.granted:
+            # Show what would be proposed, change nothing.
+            proposal = self.proposer.propose(target, observed, _fingerprint(target))
+            cycle = Cycle(1, len(observed), proposal, False, "REFUSED")
+            return stop("REFUSED", "Human authorization missing. Proposal stands. No write.",
+                        cycles=[cycle])
+        if sound is False:
+            return stop("INCONCLUSIVE", "SWIZZLE's own proofs do not hold; nothing was written.")
+
+        cycles: list[Cycle] = []
+        converged = False
+        seen: set[str] = set()
+        for number in range(1, self.max_cycles + 1):
+            baseline = _fingerprint(target)
+            proposal = self.proposer.propose(target, observed, baseline)
+            if proposal is None or not proposal.edits:
+                cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
+                converged = True
+                break
+            key = _edits_key(proposal)
+            if key in seen:
+                cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
+                return stop("NOT_CONVERGED", f"Cycle {number}: the Proposer repeated an earlier "
+                            "proposal, so the loop is going in circles. Stopped.", cycles)
+            seen.add(key)
+            cycle = self._apply(target, proposal, authorization, python, notes, number, len(observed))
+            cycles.append(cycle)
+            if cycle.outcome == "SUITE_RED":
+                return stop("INCONCLUSIVE", f"Cycle {number}: the suite is not green; nothing was written.", cycles)
+            if cycle.outcome != "APPLIED":
+                return stop("REJECT", f"Cycle {number}: {cycle.outcome}. The change was put back; "
+                            "the loop stopped.", cycles)
+            observed = self._reinspect(target, observed, python, notes)
+        if not converged:
+            return stop("NOT_CONVERGED", f"No convergence in {self.max_cycles} cycles.", cycles)
+        if observed and self.ghost_tools_root is not None:
+            notes.append(f"Proposer is out of proposals but Ghost still reports {len(observed)} finding(s). "
+                         "Converged means no proposals left, not zero findings.")
+
+        end_sound = self._calibrate(python, notes)
+        if end_sound is False:
+            return stop("INCONCLUSIVE", "SWIZZLE's proofs failed after the loop; finishing was not attempted.",
+                        cycles, converged=True)
+        if self.finisher is None:
+            return stop("ACCEPT", "Loop converged. No finisher configured.", cycles, converged=True)
+
+        finish = self.finisher.finish(target, _fingerprint(target))
+        if finish is None or not finish.edits:
+            return stop("ACCEPT", "Loop converged. The Finisher had nothing to finish.",
+                        cycles, converged=True)
+        done = self._apply(target, finish, authorization, python, notes, 0, len(observed))
+        if done.outcome != "APPLIED":
+            return stop("FINISH_REJECTED", f"Finishing: {done.outcome}. The finishing change was put back; "
+                        "the converged loop result stands.", cycles, converged=True, finish=finish)
+        after = self._reinspect(target, observed, python, notes)
+        new = {d.ghost_id for d in after if d.ghost_id} - {d.ghost_id for d in observed if d.ghost_id}
+        if new:
+            _restore(target, done.restore)
+            finish.status = TransformationStatus.REJECTED
+            return stop("FINISH_REJECTED", f"Finishing introduced new Ghost finding(s) {sorted(new)}. "
+                        "The finishing change was put back.", cycles, converged=True,
+                        current=observed, finish=finish)
+        return stop("ACCEPT", "Loop converged and the finishing change stands.", cycles,
+                    converged=True, current=after, finish=finish, finished=True)
+
+    # -- steps ------------------------------------------------------------
+
+    def _apply(self, target: Path, proposal: Transformation, auth: Authorization, python: str,
+               notes: list[str], number: int, seen: int) -> "_Applied":
+        before = self._suite(target, python, notes, f"cycle {number} before")
         if before is not None and not before.green:
             proposal.status = TransformationStatus.PROPOSED
-            return _stopped(common, notes, "INCONCLUSIVE",
-                            "Rule 7: the target's suite is not green before the change "
-                            f"({before.describe()}), so it cannot protect behavior. Nothing was written.",
-                            proposal, suite_before=before)
-
+            notes.append("Rule 7: the target's suite is not green before the change "
+                         f"({before.describe()}), so it cannot protect behavior. Nothing was written.")
+            return _Applied(number, seen, proposal, False, "SUITE_RED", before, None, {})
         snapshot = _snapshot(target, proposal)
-        proposal.authorize(authorization)
+        proposal.authorize(auth)
         proposal.apply(target)
-        notes.append("Transformation applied under granted authorization.")
-
-        after = self._suite(target, python, notes, "after")
+        notes.append(f"Cycle {number}: transformation applied under granted authorization.")
+        after = self._suite(target, python, notes, f"cycle {number} after")
         broken = preserved(before, after) if before is not None else None
         if broken is not None:
             _restore(target, snapshot)
             proposal.status = TransformationStatus.REJECTED
-            return _stopped(common, notes, "REJECT",
-                            f"Rule 7: {broken}. The change was put back.",
-                            proposal, suite_before=before, suite_after=after)
-
-        reobserved = self._reinspect(target, observed, python, notes)
-        attack = craft.attack(target, ground)
-        review_after = craft.review(target)
-        return TagTeamResult(
-            **common, proposal=proposal, applied=True, reobserved=reobserved, attack=attack,
-            review_after=review_after, decision=_decide(attack, review_after, notes),
-            notes=tuple(notes), suite_before=before, suite_after=after,
-        )
-
-    # -- steps ------------------------------------------------------------
+            notes.append(f"Rule 7: {broken}.")
+            return _Applied(number, seen, proposal, False, "PUT_BACK", before, after, snapshot)
+        return _Applied(number, seen, proposal, True, "APPLIED", before, after, snapshot)
 
     def _calibrate(self, python: str, notes: list[str]) -> Optional[bool]:
         """SWIZZLE's instrument check: are its own planted defects still real?"""
@@ -171,7 +244,7 @@ class TagTeam:
 
     def _suite(self, target: Path, python: str, notes: list[str], when: str) -> Optional[SuiteRun]:
         if not self.run_tests:
-            if when == "before":
+            if when.endswith("before"):
                 notes.append("Rule 7 NOT RUN: run_tests=False. Behavior preservation is unmeasured.")
             return None
         result = run_suite(target, python)
@@ -181,15 +254,38 @@ class TagTeam:
     def _reinspect(self, target: Path, observed: tuple[Defect, ...], python: str,
                    notes: list[str]) -> tuple[Defect, ...]:
         if self.ghost_tools_root is None:
-            return ()
+            return observed
         reobserved = defects_from_ghost(
             ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python))
-        notes.append(f"Ghost Tools re-inspected: {len(reobserved)} finding(s).")
         before_ids = {d.ghost_id for d in observed if d.ghost_id}
         after_ids = {d.ghost_id for d in reobserved if d.ghost_id}
-        notes.append(f"finding-id delta: closed={sorted(before_ids - after_ids)} "
-                     f"new={sorted(after_ids - before_ids)}")
+        notes.append(f"Ghost re-inspected: {len(reobserved)} finding(s); "
+                     f"closed={sorted(before_ids - after_ids)} new={sorted(after_ids - before_ids)}")
         return reobserved
+
+
+@dataclass
+class _Applied(Cycle):
+    restore: Dict[str, Optional[str]] = field(default_factory=dict)
+
+    def __init__(self, number, observed, proposal, applied, outcome, before, after, restore):
+        super().__init__(number, observed, proposal, applied, outcome, before, after)
+        self.restore = restore
+
+
+def _fingerprint(target: Path) -> str:
+    """A short hash of the tree, so a proposal can say which state it was written against."""
+    digest = hashlib.sha256()
+    skip = {".git", "__pycache__", ".pytest_cache", ".venv", "node_modules"}
+    for path in sorted(Path(target).rglob("*")):
+        if path.is_file() and not skip.intersection(path.relative_to(target).parts):
+            digest.update(str(path.relative_to(target)).encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _edits_key(proposal: Transformation) -> str:
+    return hashlib.sha256(repr([(e.path, e.kind, e.old, e.new) for e in proposal.edits]).encode()).hexdigest()
 
 
 def _refuse_self_authorization(target: Path, authorization: Optional[Authorization]) -> None:
@@ -198,23 +294,6 @@ def _refuse_self_authorization(target: Path, authorization: Optional[Authorizati
     if (target.name.lower() == "elegant" and authorization and authorization.granted
             and authorization.actor.lower() in {"elegant", "self"}):
         raise Unauthorized("Elegant cannot authorize work on itself.")
-
-
-def _stopped(common: dict, notes: list[str], decision: str, reason: str,
-             proposal: Optional[Transformation] = None, **suites) -> TagTeamResult:
-    """A run that ends without an accepted write: one shape, one stated reason."""
-    return TagTeamResult(**common, proposal=proposal, applied=False, reobserved=(), attack=None,
-                         review_after=None, decision=decision, notes=tuple(notes + [reason]),
-                         **suites)
-
-
-def _decide(attack: AttackResult, review_after: Review, notes: list[str]) -> str:
-    if attack.judgement in {"REJECT", "INCONCLUSIVE"}:
-        return attack.judgement
-    if not review_after.good_enough:
-        notes.append("The oracle accepted the change; the craft's review still says it is not good enough yet.")
-        return "REJECT"
-    return "ACCEPT"
 
 
 def _snapshot(target: Path, proposal: Transformation) -> Dict[str, Optional[str]]:

@@ -1,11 +1,11 @@
-"""Elegant governs a craft; it never depends on one."""
+"""Elegant governs its seats; it never depends on what sits in them."""
 
 import ast
 from pathlib import Path
 
 import elegant
 
-_FORBIDDEN = {"streamline"}
+_FORBIDDEN = {"streamline", "proposer", "ghost_buster", "swizzle", "touchstone"}
 
 
 def _imports(path: Path) -> set[str]:
@@ -18,7 +18,7 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
-def test_no_elegant_module_imports_a_craft():
+def test_no_elegant_module_imports_a_seat_filler():
     root = Path(elegant.__file__).parent
     offenders = {str(p.relative_to(root)): sorted(_imports(p) & _FORBIDDEN)
                  for p in root.rglob("*.py") if _imports(p) & _FORBIDDEN}

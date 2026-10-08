@@ -3,8 +3,8 @@
 WHAT THIS IS
     The governor of a code change. It decides whether a change may be made,
     whether it stands, and what is recorded. It does not decide what makes code
-    beautiful; that is Streamline's work, and it reaches Elegant through the
-    `Craft` interface in `elegant.craft`.
+    a good fix or beautiful code look like; a Proposer (in the loop) and a
+    Finisher (once, after it) do, through the seats in `elegant.roles`.
 
 WHAT IT OWNS
     Transformation proposals as data, the human authorization boundary, the
@@ -13,7 +13,7 @@ WHAT IT OWNS
     becoming any of them.
 
 WHAT IT DOES NOT OWN
-    The opinion about better code (Streamline). Forensic inspection (Ghost
+    The proposals (Proposer) and the beautifying and final README (Streamline). Forensic inspection (Ghost
     Tools). Adversarial challenge (SWIZZLE). Runtime governance contracts
     (CNS). Live admission, decision, custody.
 
@@ -22,17 +22,17 @@ WHAT IT MUST NEVER DO
     Certify itself.
     Modify CNS.
     Convert UNKNOWN into APPROVED.
-    Let a craft's good opinion outvote a red suite or a missing grant.
+    Let a Proposer or Finisher's good opinion outvote a red suite or a missing grant.
 """
 
 from .epistemic import EpistemicState
 from .models import Defect, DefectLifecycle, Transformation, TransformationStatus
 from .authorization import Authorization, Unauthorized
-from .craft import AttackResult, Craft, Review
+from .roles import Finisher, Proposer
 from .tagteam import TagTeam, TagTeamResult
 from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "EpistemicState",
@@ -42,9 +42,8 @@ __all__ = [
     "TransformationStatus",
     "Authorization",
     "Unauthorized",
-    "AttackResult",
-    "Craft",
-    "Review",
+    "Proposer",
+    "Finisher",
     "TagTeam",
     "TagTeamResult",
     "HorsemenWorkflow",
