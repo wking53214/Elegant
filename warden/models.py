@@ -4,7 +4,7 @@ A transformation is a *proposal* until an Authorization grants it. Applying
 without that grant is a bug in the caller, and this module refuses.
 
 Defect identity: Ghost Tools already owns machine identity (`ghost-<hash>`).
-Elegant preserves those IDs. Human-readable C1/H1/M1/L1 labels are assigned
+Warden preserves those IDs. Human-readable C1/H1/M1/L1 labels are assigned
 only when no Ghost identity exists, and they are labels, not a second authority.
 """
 
@@ -61,10 +61,10 @@ def human_label(severity: DefectSeverity, index: int) -> str:
     return f"{_SEVERITY_PREFIX[severity]}{index}"
 
 
-def ghost_severity_to_elegant(value: str) -> DefectSeverity:
-    """Map Ghost Tools severity onto Elegant's four-level scale.
+def ghost_severity_to_warden(value: str) -> DefectSeverity:
+    """Map Ghost Tools severity onto Warden's four-level scale.
 
-    Ghost uses critical/major/minor/informational. Elegant uses
+    Ghost uses critical/major/minor/informational. Warden uses
     critical/high/medium/low. This is a documented translation, not a claim
     that the two scales are identical.
     """
@@ -97,7 +97,7 @@ class Defect:
     file: Optional[str] = None
     epistemic: EpistemicState = EpistemicState.UNKNOWN
     ghost_status: Optional[str] = None  # CONFIRMED/REASONED/… preserved verbatim
-    #: What Ghost said, verbatim, so a Proposer can act on Ghost's own facts
+    #: What Ghost said, verbatim, so a Drafter can act on Ghost's own facts
     #: instead of re-measuring the tree or parsing the summary sentence.
     detector: Optional[str] = None
     line: Optional[int] = None
@@ -112,7 +112,7 @@ class Defect:
 class Transformation:
     """One intentional change, with a reason, a baseline, and a preservation expectation.
 
-    Elegant must not silently alter code. `apply` requires a granted
+    Warden must not silently alter code. `apply` requires a granted
     Authorization whose operation and subject match this transformation.
     """
 
@@ -149,7 +149,7 @@ class Transformation:
         if self.authorization is None or not self.authorization.granted:
             raise Unauthorized(
                 "refusing to apply: no granted authorization. "
-                "Elegant proposes; a human authorizes."
+                "Warden proposes; a human authorizes."
             )
         if self.status not in {TransformationStatus.AUTHORIZED, TransformationStatus.APPLIED}:
             raise Unauthorized(f"refusing to apply in status {self.status.value}")
@@ -240,7 +240,7 @@ def defects_from_ghost(findings: Sequence[Mapping[str, Any]]) -> tuple[Defect, .
     out: list[Defect] = []
     counters = {s: 0 for s in DefectSeverity}
     for raw in findings:
-        sev = ghost_severity_to_elegant(str(raw.get("severity", "minor")))
+        sev = ghost_severity_to_warden(str(raw.get("severity", "minor")))
         counters[sev] += 1
         status = raw.get("status")
         epistemic = EpistemicState.VERIFIED if status == "confirmed" else EpistemicState.UNKNOWN

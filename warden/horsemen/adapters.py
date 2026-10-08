@@ -15,16 +15,16 @@ class SpecimenRef:
     epistemic_status: str
     isolation_required: bool = True
 
-class TouchstoneUnavailable(RuntimeError):
-    """TOUCHSTONE's answer key could not be read. Never treated as 'no specimens'."""
+class AssayUnavailable(RuntimeError):
+    """ASSAY's answer key could not be read. Never treated as 'no specimens'."""
 
 
-class TouchstoneAdapter:
-    def __init__(self, touchstone_root=None):
-        self.root = Path(touchstone_root) if touchstone_root else None
+class AssayAdapter:
+    def __init__(self, assay_root=None):
+        self.root = Path(assay_root) if assay_root else None
 
     def load_registry(self, registry_path=None):
-        """Read TOUCHSTONE's published answer key (touchstone_production/registry.json).
+        """Read ASSAY's published answer key (assay_production/registry.json).
 
         Fails loudly rather than returning an empty list: an empty specimen
         set looks exactly like "nothing to check" and cannot be told apart
@@ -32,23 +32,23 @@ class TouchstoneAdapter:
         """
         if registry_path is None:
             if self.root is None:
-                raise TouchstoneUnavailable(
-                    "no TOUCHSTONE root configured; pass touchstone_root or registry_path")
-            registry_path = self.root / "touchstone_production" / "registry.json"
+                raise AssayUnavailable(
+                    "no ASSAY root configured; pass assay_root or registry_path")
+            registry_path = self.root / "assay_production" / "registry.json"
         registry_path = Path(registry_path)
         if not registry_path.is_file():
-            raise TouchstoneUnavailable(
-                f"TOUCHSTONE registry not found at {registry_path}; generate it in TOUCHSTONE with "
-                "`python3 -m touchstone_production.manifest_registry --write`")
+            raise AssayUnavailable(
+                f"ASSAY registry not found at {registry_path}; generate it in ASSAY with "
+                "`python3 -m assay_production.manifest_registry --write`")
         data = json.loads(registry_path.read_text(encoding="utf-8"))
         if not isinstance(data, dict) or not data:
-            raise TouchstoneUnavailable(f"TOUCHSTONE registry at {registry_path} is empty or malformed")
+            raise AssayUnavailable(f"ASSAY registry at {registry_path} is empty or malformed")
         base = self.root if self.root is not None else registry_path.parent.parent
         missing = [d.get("path", "") for d in data.values()
                    if not isinstance(d, dict) or not d.get("path") or not (base / d["path"]).is_file()]
         if missing:
-            raise TouchstoneUnavailable(
-                f"TOUCHSTONE registry names {len(missing)} specimen file(s) that do not exist, "
+            raise AssayUnavailable(
+                f"ASSAY registry names {len(missing)} specimen file(s) that do not exist, "
                 f"e.g. {missing[0]!r}")
         out = []
         for sid, d in data.items():
@@ -64,7 +64,7 @@ class TouchstoneAdapter:
 
     def handoff_specimens(self, specimens, *, repository, repository_sha, baseline_id):
         return Handoff.make(
-            producer="TOUCHSTONE", consumer="Elegant", kind=HandoffKind.SPECIMEN,
+            producer="ASSAY", consumer="Warden", kind=HandoffKind.SPECIMEN,
             repository=repository, repository_sha=repository_sha, baseline_id=baseline_id,
             epistemic_state=EpistemicLabel.REASONED if specimens else EpistemicLabel.UNKNOWN,
             result="SPECIMENS_PROVIDED" if specimens else "NO_SPECIMENS_UNKNOWN",
@@ -74,7 +74,7 @@ class TouchstoneAdapter:
                  "epistemic_status": s.epistemic_status}
                 for s in specimens
             ]},
-            provenance="TOUCHSTONE specimen registry",
+            provenance="ASSAY specimen registry",
         )
 
 @dataclass
@@ -113,7 +113,7 @@ class GhostToolsAdapter:
     def handoff_findings(self, findings, *, repository, repository_sha, baseline_id, phase="inspect"):
         epistemic = EpistemicLabel.REASONED if findings else EpistemicLabel.UNKNOWN
         return Handoff.make(
-            producer="ghost_tools", consumer="Elegant", kind=HandoffKind.FINDING,
+            producer="ghost_tools", consumer="Warden", kind=HandoffKind.FINDING,
             repository=repository, repository_sha=repository_sha, baseline_id=baseline_id,
             epistemic_state=epistemic,
             payload={"phase": phase, "count": len(findings), "findings": [
@@ -167,7 +167,7 @@ class SwizzleAdapter:
         else:
             epistemic, result = EpistemicLabel.REASONED, "PASSED"
         return Handoff.make(
-            producer="SWIZZLE", consumer="Elegant", kind=HandoffKind.VERDICT,
+            producer="SWIZZLE", consumer="Warden", kind=HandoffKind.VERDICT,
             repository=repository, repository_sha=repository_sha, baseline_id=baseline_id,
             epistemic_state=epistemic,
             payload={"phase": phase, "count": len(verdicts), "failed_count": len(failed),

@@ -1,8 +1,8 @@
 """Truthful epistemic language.
 
-Elegant uses this vocabulary for *its own* claims about architecture and
+Warden uses this vocabulary for *its own* claims about architecture and
 documentation. When Ghost Tools already has a stronger native vocabulary
-(CONFIRMED / REASONED / SUPPRESSED), Elegant preserves that vocabulary on
+(CONFIRMED / REASONED / SUPPRESSED), Warden preserves that vocabulary on
 consumed findings and does not rename it for cosmetic consistency.
 
 These states are not a confidence score. They are a contract about what

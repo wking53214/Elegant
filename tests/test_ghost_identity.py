@@ -1,6 +1,6 @@
 """Ghost identity is consumed, not re-hashed."""
 
-from elegant.models import defects_from_ghost
+from warden.models import defects_from_ghost
 
 
 def test_preserves_ghost_id():
@@ -39,7 +39,7 @@ def test_major_maps_to_high_not_critical():
     assert d.human_id == "H1"
 
 
-def test_ghost_facts_reach_the_proposer_verbatim():
+def test_ghost_facts_reach_the_drafter_verbatim():
     raw = {"id": "ghost-1", "severity": "minor", "status": "confirmed",
            "summary": "s", "detector": "doc_test_count_drift",
            "attributes": {"documented_count": "16", "static_lower_bound": "79"},

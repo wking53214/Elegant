@@ -1,7 +1,7 @@
 """Rules 5 and 9: the defect audit file, with IDs that never change meaning.
 
 Elegant.md, Rule 9: "Every defect gets a stable ID in a single source of
-truth (e.g. `ELEGANT_AUDIT.md`) ... IDs never reuse meanings once
+truth (e.g. `WARDEN_AUDIT.md`) ... IDs never reuse meanings once
 published." Rule 5: document defects before fixing them.
 
 `defects_from_ghost` numbers findings in scan order (C1, H1, ... per run), so
@@ -15,7 +15,7 @@ reading the audit file it wrote last time:
     "not seen in latest scan". It is never deleted and the ID is never given
     to anything else. A human marks it Fixed with the commit SHA.
 
-Only the table between the markers is Elegant's. Everything else in the file
+Only the table between the markers is Warden's. Everything else in the file
 (design analogy, layer map, invariants, notes) is the author's and is carried
 over byte for byte.
 """
@@ -26,11 +26,11 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Sequence
 
-from .models import DefectSeverity, ghost_severity_to_elegant
+from .models import DefectSeverity, ghost_severity_to_warden
 
-FILENAME = "ELEGANT_AUDIT.md"
-BEGIN = "<!-- elegant:defects -->"
-END = "<!-- /elegant:defects -->"
+FILENAME = "WARDEN_AUDIT.md"
+BEGIN = "<!-- warden:defects -->"
+END = "<!-- /warden:defects -->"
 
 _PREFIX = {DefectSeverity.CRITICAL: "C", DefectSeverity.HIGH: "H",
            DefectSeverity.MEDIUM: "M", DefectSeverity.LOW: "L"}
@@ -39,10 +39,10 @@ _ROW = re.compile(r"^\| (?P<id>[CHML]\d+) \| (?P<priority>[^|]*) \| (?P<status>[
                   r"(?P<detector>[^|]*) \| (?P<location>[^|]*) \| (?P<summary>.*) \| "
                   r"`(?P<ghost>[^`]*)` \|$", re.M)
 
-_SKELETON = """# Elegant audit
+_SKELETON = """# Warden audit
 
 Single source of truth for defects in this repository (Elegant.md, Rules 5
-and 9). The table is maintained by `elegant audit`; IDs are never reused.
+and 9). The table is maintained by `warden audit`; IDs are never reused.
 Mark a row Fixed by hand, with the commit SHA, when the fix lands.
 
 ## Design analogy
@@ -115,7 +115,7 @@ def update(existing_text: str, findings: Sequence[Mapping]) -> str:
             elif row.status.startswith("Fixed"):
                 row.status = f"Reopened (was {row.status})"
             continue
-        severity = ghost_severity_to_elegant(str(f.get("severity", "minor")))
+        severity = ghost_severity_to_warden(str(f.get("severity", "minor")))
         prefix = _PREFIX[severity]
         used[prefix] += 1
         row = Row(id=f"{prefix}{used[prefix]}", priority=severity.value.upper(), status="Open",

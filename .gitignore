@@ -8,4 +8,4 @@ build/
 dist/
 .venv/
 venv/
-.elegant_work/
+.warden_work/

@@ -71,7 +71,7 @@ def run_suite(target: Path, python: str, timeout: float = 900.0) -> SuiteRun:
     invisible to the "after" run and a breaking change passed the gate.
     Measured on this module's own test, 2 failures in 3 runs, before this.
     """
-    with tempfile.TemporaryDirectory(prefix="elegant-pyc-") as pyc:
+    with tempfile.TemporaryDirectory(prefix="warden-pyc-") as pyc:
         env = dict(os.environ, PYTHONPYCACHEPREFIX=pyc)
         try:
             done = subprocess.run(

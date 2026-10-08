@@ -1,4 +1,4 @@
-"""Four Horsemen workflow orchestration owned by Elegant."""
+"""Four Horsemen workflow orchestration owned by Warden."""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -9,13 +9,13 @@ from ..authorization import Unauthorized
 from .authorization_scope import (
     ChangeClass, HIGH_RISK_CLASSES, ScopeSpec, ScopedGrant, grant_scoped, validate_scoped,
 )
-from .adapters import GhostFinding, GhostToolsAdapter, SpecimenRef, SwizzleAdapter, SwizzleVerdict, TouchstoneAdapter
+from .adapters import GhostFinding, GhostToolsAdapter, SpecimenRef, SwizzleAdapter, SwizzleVerdict, AssayAdapter
 from .contracts import EpistemicLabel, Handoff, HandoffKind
 from .receipt import ProductionReceipt, emit_receipt
 
 class WorkflowPhase(str, Enum):
     FREEZE_BASELINE = "FREEZE_BASELINE"
-    TOUCHSTONE = "TOUCHSTONE"
+    ASSAY = "ASSAY"
     GHOST_INSPECT = "GHOST_INSPECT"
     PROPOSE = "PROPOSE"
     SWIZZLE_ADVERSARIAL = "SWIZZLE_ADVERSARIAL"
@@ -68,8 +68,8 @@ class WorkflowState:
             self.handoffs.append(handoff)
 
 class HorsemenWorkflow:
-    def __init__(self, *, touchstone=None, ghost=None, swizzle=None):
-        self.touchstone = touchstone or TouchstoneAdapter()
+    def __init__(self, *, assay=None, ghost=None, swizzle=None):
+        self.assay = assay or AssayAdapter()
         self.ghost = ghost or GhostToolsAdapter()
         self.swizzle = swizzle or SwizzleAdapter()
         self.states = {}
@@ -87,10 +87,10 @@ class HorsemenWorkflow:
     def ingest_specimens(self, workflow_id, specimens):
         st = self.states[workflow_id]
         st.specimens = list(specimens)
-        hof = self.touchstone.handoff_specimens(
+        hof = self.assay.handoff_specimens(
             specimens, repository=st.repository, repository_sha=st.baseline_sha, baseline_id=st.baseline_id,
         )
-        st._record(WorkflowPhase.TOUCHSTONE, hof.result or "ok", hof, count=len(specimens))
+        st._record(WorkflowPhase.ASSAY, hof.result or "ok", hof, count=len(specimens))
         return hof
 
     def ingest_findings(self, workflow_id, findings, *, phase="inspect"):
@@ -116,7 +116,7 @@ class HorsemenWorkflow:
         st.proposal_payload["change_class"] = st.change_class.value
         st.proposal_payload["baseline_id"] = st.baseline_id
         hof = Handoff.make(
-            producer="Elegant", consumer="SWIZZLE", kind=HandoffKind.PROPOSAL,
+            producer="Warden", consumer="SWIZZLE", kind=HandoffKind.PROPOSAL,
             repository=st.repository, repository_sha=st.baseline_sha, baseline_id=st.baseline_id,
             epistemic_state=EpistemicLabel.REASONED, payload=st.proposal_payload, result="PROPOSED",
         )
@@ -173,7 +173,7 @@ class HorsemenWorkflow:
         )
         st.grant = grant
         hof = Handoff.make(
-            producer="Elegant", consumer="Elegant", kind=HandoffKind.AUTHORIZATION,
+            producer="Warden", consumer="Warden", kind=HandoffKind.AUTHORIZATION,
             repository=st.repository, repository_sha=st.baseline_sha, baseline_id=st.baseline_id,
             epistemic_state=EpistemicLabel.CONFIRMED,
             payload={"authorization_id": grant.authorization_id, "actor": actor,
@@ -199,7 +199,7 @@ class HorsemenWorkflow:
                 raise Unauthorized(f"Invariant check {i} failed after edit; treat as refuse.")
         st.files_changed = list(files)
         hof = Handoff.make(
-            producer="Elegant", consumer="ghost_tools", kind=HandoffKind.TRANSFORMATION,
+            producer="Warden", consumer="ghost_tools", kind=HandoffKind.TRANSFORMATION,
             repository=st.repository, repository_sha=current_sha, baseline_id=st.baseline_id,
             epistemic_state=EpistemicLabel.CONFIRMED,
             payload={"files_changed": files, "authorization_id": st.grant.authorization_id,

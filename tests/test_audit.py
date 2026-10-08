@@ -2,8 +2,8 @@
 import json
 from pathlib import Path
 
-from elegant import audit
-from elegant.cli import main
+from warden import audit
+from warden.cli import main
 
 
 def _f(gid, sev="major", det="dead_code", summary="x"):
@@ -53,18 +53,18 @@ def test_cli_refuses_self_authorization_and_an_audit_of_nothing(tmp_path: Path):
     findings = tmp_path / "f.json"
     findings.write_text("[]", encoding="utf-8")
     assert main(["audit", str(tmp_path), "--from-ghost", str(findings),
-                 "--authorize", "elegant", "--reason", "x"]) == 2
+                 "--authorize", "warden", "--reason", "x"]) == 2
     assert main(["audit", str(tmp_path)]) == 2
 
 
 def test_audit_runs_as_a_module_command(tmp_path: Path):
-    """`python -m elegant.cli audit` once failed with NameError: the helper sat
+    """`python -m warden.cli audit` once failed with NameError: the helper sat
     below the __main__ guard, so importing tests passed and the command broke."""
     import subprocess
     import sys
     findings = tmp_path / "f.json"
     findings.write_text(json.dumps([_f("ghost-a")]), encoding="utf-8")
-    done = subprocess.run([sys.executable, "-m", "elegant.cli", "audit", str(tmp_path),
+    done = subprocess.run([sys.executable, "-m", "warden.cli", "audit", str(tmp_path),
                            "--from-ghost", str(findings)], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
     assert "| H1 |" in done.stdout
