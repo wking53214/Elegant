@@ -6,10 +6,10 @@ the target's tests at all.
 from pathlib import Path
 
 from elegant.authorization import grant
-from elegant.models import FileEdit, Transformation, TransformationStatus
-from elegant.proposers import documentation_honesty_proposer
 from elegant.suite import SuiteRun, preserved
 from elegant.tagteam import TagTeam
+
+from fakes import FakeCraft
 
 
 def _repo(root: Path, test_body: str = "    assert True\n") -> None:
@@ -18,7 +18,7 @@ def _repo(root: Path, test_body: str = "    assert True\n") -> None:
     (root / "tests").mkdir()
     (root / "tests" / "test_pkg.py").write_text(
         "from pkg import VALUE\n\ndef test_value():\n" + test_body, encoding="utf-8")
-    (root / "PROVENANCE.md").write_text("All 9 tests passed on python3.\n", encoding="utf-8")
+    (root / "NOTE.md").write_text("old note\n", encoding="utf-8")
     (root / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "0.0.1"\n',
                                           encoding="utf-8")
 
@@ -27,20 +27,14 @@ def _auth(root: Path):
     return grant("william", "transform", str(root.resolve()), "documentation", "rule 7 test")
 
 
-def _breaker(target, observed, ground):
-    """A proposal that changes behavior: VALUE becomes 2, and the suite checks 1."""
-    return Transformation(
-        target=str(Path(target).resolve()), intent="break it", architectural_reason="test",
-        affected_files=("pkg/__init__.py",), expected_behavior="none",
-        preservation_requirements=(), known_defects=(), transformation_scope="code",
-        baseline_reference=ground.readme_sha16, evidence=(),
-        edits=(FileEdit(path="pkg/__init__.py", kind="write", new="VALUE = 2\n"),),
-        status=TransformationStatus.PROPOSED)
+def _breaker():
+    """A craft whose change alters behavior: VALUE becomes 2, and the suite checks 1."""
+    return FakeCraft(path="pkg/__init__.py", new_text="VALUE = 2\n")
 
 
 def test_a_change_that_breaks_the_suite_is_put_back(tmp_path: Path):
     _repo(tmp_path, "    assert VALUE == 1\n")
-    result = TagTeam(proposer=_breaker).run(tmp_path, findings=[], authorization=_auth(tmp_path))
+    result = TagTeam(craft=_breaker()).run(tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "REJECT" and not result.applied
     assert (tmp_path / "pkg" / "__init__.py").read_text(encoding="utf-8") == "VALUE = 1\n"
     assert result.suite_before.green and result.suite_after.failed == 1
@@ -49,27 +43,27 @@ def test_a_change_that_breaks_the_suite_is_put_back(tmp_path: Path):
 
 def test_a_red_suite_before_the_change_means_no_write(tmp_path: Path):
     _repo(tmp_path, "    assert False\n")
-    before = (tmp_path / "PROVENANCE.md").read_text(encoding="utf-8")
-    result = TagTeam(proposer=documentation_honesty_proposer).run(
+    before = (tmp_path / "NOTE.md").read_text(encoding="utf-8")
+    result = TagTeam(craft=FakeCraft()).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "INCONCLUSIVE" and not result.applied
-    assert (tmp_path / "PROVENANCE.md").read_text(encoding="utf-8") == before
+    assert (tmp_path / "NOTE.md").read_text(encoding="utf-8") == before
 
 
 def test_no_tests_means_no_write(tmp_path: Path):
     _repo(tmp_path)
     (tmp_path / "tests" / "test_pkg.py").unlink()
-    before = (tmp_path / "PROVENANCE.md").read_text(encoding="utf-8")
-    result = TagTeam(proposer=documentation_honesty_proposer).run(
+    before = (tmp_path / "NOTE.md").read_text(encoding="utf-8")
+    result = TagTeam(craft=FakeCraft()).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "INCONCLUSIVE"
-    assert (tmp_path / "PROVENANCE.md").read_text(encoding="utf-8") == before
+    assert (tmp_path / "NOTE.md").read_text(encoding="utf-8") == before
     assert not result.suite_before.ran
 
 
 def test_a_preserving_change_records_both_counts(tmp_path: Path):
     _repo(tmp_path)
-    result = TagTeam(proposer=documentation_honesty_proposer).run(
+    result = TagTeam(craft=FakeCraft()).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.applied
     assert result.suite_before.passed == result.suite_after.passed == 1
@@ -78,7 +72,7 @@ def test_a_preserving_change_records_both_counts(tmp_path: Path):
 
 def test_turning_the_gate_off_is_said_out_loud(tmp_path: Path):
     _repo(tmp_path)
-    result = TagTeam(proposer=documentation_honesty_proposer, run_tests=False).run(
+    result = TagTeam(craft=FakeCraft(), run_tests=False).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert any("Rule 7 NOT RUN" in n for n in result.notes)
 

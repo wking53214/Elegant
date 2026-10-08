@@ -1,12 +1,16 @@
-"""Ghost Tools × Elegant × SWIZZLE tag team.
+"""Ghost Tools × Elegant × SWIZZLE tag team: the discipline of change.
 
-Conceptual order (starting hypothesis, implemented as this module):
+Conceptual order (implemented as this module):
 
     calibrate (SWIZZLE proves its own instrument)
-        → observe (Ghost) → propose (Elegant) → authorize (human)
+        → observe (Ghost) → propose (a craft) → authorize (human)
         → suite before (Rule 7) → transform → suite after (Rule 7)
-        → re-inspect (Ghost) → attack (SWIZZLE-style oracle)
+        → re-inspect (Ghost) → attack (the craft's independent oracle)
         → ACCEPT / REJECT
+
+What counts as better is not decided here. A craft (see `elegant.craft`;
+Streamline is the one that exists) answers freeze, review, propose and attack.
+This module decides only whether a change may be made and whether it stands.
 
 Every stop before the write returns the same shape through `_stopped`, so
 the reason a run ended is always one sentence in the notes and nothing is
@@ -18,8 +22,8 @@ This module refuses three self-certifying loops:
     Ghost Tools finds its own work correct merely because it produced it.
     SWIZZLE trusts the transformation framework without independent challenge.
 
-The documentation-honesty oracle in elegant.swizzle does not import the
-critic, and the critic does not import the oracle.
+A craft's own reviewer and its attack oracle are separate questions asked
+separately; a good review never outvotes a failed suite or a failed attack.
 """
 
 from __future__ import annotations
@@ -27,16 +31,14 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence
 
 from .authorization import Authorization, Unauthorized
-from .critic import PoetryCritic, CriticReport
+from .craft import AttackResult, Craft, Review
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
-from .narrative import inspect_tree
 from .suite import SuiteRun, preserved, run_suite
-from .swizzle import (AttackResult, GroundTruth, attack_documentation_honesty, freeze,
-                      swizzle_proofs_hold)
+from .swizzle import swizzle_proofs_hold
 
 
 @dataclass
@@ -48,8 +50,8 @@ class TagTeamResult:
     applied: bool
     reobserved: tuple[Defect, ...]
     attack: Optional[AttackResult]
-    critic_before: CriticReport
-    critic_after: Optional[CriticReport]
+    review_before: Optional[Review]
+    review_after: Optional[Review]
     decision: str  # ACCEPT / REJECT / REFUSED / INCONCLUSIVE
     notes: tuple[str, ...]
     #: True: SWIZZLE's proofs held. False: they did not (no write happens).
@@ -66,16 +68,15 @@ class TagTeam:
         *,
         ghost_tools_root: Optional[Path] = None,
         swizzle_root: Optional[Path] = None,
-        proposer: Optional[Callable[[Path, tuple[Defect, ...], GroundTruth], Transformation]] = None,
+        craft: Optional[Craft] = None,
         run_tests: bool = True,
     ) -> None:
         self.ghost_tools_root = ghost_tools_root
         self.swizzle_root = swizzle_root
-        self.proposer = proposer
+        self.craft = craft
         #: Rule 7. Off only for callers that measure the suite some other way;
         #: the notes say so when it is off.
         self.run_tests = run_tests
-        self.critic = PoetryCritic()
 
     def run(
         self,
@@ -90,16 +91,17 @@ class TagTeam:
         _refuse_self_authorization(target, authorization)
         notes: list[str] = []
         swizzle_sound = self._calibrate(python, notes)
-        critic_before = self.critic.critique(target, inspect_tree(target))
-        ground = freeze(target)
         observed = self._observe(target, findings, python, notes)
-        common = dict(target=str(target), baseline=ground.readme_sha16, observed=observed,
-                      critic_before=critic_before, swizzle_sound=swizzle_sound)
-
-        if self.proposer is None:
+        craft = self.craft
+        if craft is None:
+            common = dict(target=str(target), baseline="UNKNOWN", observed=observed,
+                          review_before=None, swizzle_sound=swizzle_sound)
             return _stopped(common, notes, "INCONCLUSIVE",
-                            "No proposer. Tag team observed and criticised only.")
-        proposal = self.proposer(target, observed, ground)
+                            "No craft. Tag team observed only; nothing can be proposed.")
+        ground = craft.freeze(target)
+        common = dict(target=str(target), baseline=ground.fingerprint, observed=observed,
+                      review_before=craft.review(target), swizzle_sound=swizzle_sound)
+        proposal = craft.propose(target, observed, ground)
         if authorization is None or not authorization.granted:
             proposal.status = TransformationStatus.PROPOSED
             return _stopped(common, notes, "REFUSED",
@@ -134,11 +136,11 @@ class TagTeam:
                             proposal, suite_before=before, suite_after=after)
 
         reobserved = self._reinspect(target, observed, python, notes)
-        attack = attack_documentation_honesty(target, ground)
-        critic_after = self.critic.critique(target)
+        attack = craft.attack(target, ground)
+        review_after = craft.review(target)
         return TagTeamResult(
             **common, proposal=proposal, applied=True, reobserved=reobserved, attack=attack,
-            critic_after=critic_after, decision=_decide(attack, critic_after, notes),
+            review_after=review_after, decision=_decide(attack, review_after, notes),
             notes=tuple(notes), suite_before=before, suite_after=after,
         )
 
@@ -202,15 +204,15 @@ def _stopped(common: dict, notes: list[str], decision: str, reason: str,
              proposal: Optional[Transformation] = None, **suites) -> TagTeamResult:
     """A run that ends without an accepted write: one shape, one stated reason."""
     return TagTeamResult(**common, proposal=proposal, applied=False, reobserved=(), attack=None,
-                         critic_after=None, decision=decision, notes=tuple(notes + [reason]),
+                         review_after=None, decision=decision, notes=tuple(notes + [reason]),
                          **suites)
 
 
-def _decide(attack: AttackResult, critic_after: CriticReport, notes: list[str]) -> str:
+def _decide(attack: AttackResult, review_after: Review, notes: list[str]) -> str:
     if attack.judgement in {"REJECT", "INCONCLUSIVE"}:
         return attack.judgement
-    if not critic_after.good_enough:
-        notes.append("Oracle accepted test-count honesty; critic still says this isn't good enough yet.")
+    if not review_after.good_enough:
+        notes.append("The oracle accepted the change; the craft's review still says it is not good enough yet.")
         return "REJECT"
     return "ACCEPT"
 

@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elegant"
-version = "0.3.0"
-description = "Architectural transparency: make software so intentionally structured and so truthfully documented that another programmer can understand the architecture by reading the artifact itself"
+version = "0.4.0"
+description = "The discipline of change: a human grant, a green suite before and after, SWIZZLE proofs, and a durable record. What counts as better lives in Streamline."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "William N. King" }]
-keywords = ["architecture", "documentation", "transparency", "refactoring", "assurance"]
+keywords = ["governance", "change-control", "assurance", "audit"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -20,8 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Quality Assurance",
-    "Topic :: Software Development :: Documentation",
-]
+    ]
 dependencies = []
 
 [project.urls]

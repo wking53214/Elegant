@@ -1,0 +1,31 @@
+"""Elegant governs a craft; it never depends on one."""
+
+import ast
+from pathlib import Path
+
+import elegant
+
+_FORBIDDEN = {"streamline"}
+
+
+def _imports(path: Path) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            names.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            names.add(node.module.split(".")[0])
+    return names
+
+
+def test_no_elegant_module_imports_a_craft():
+    root = Path(elegant.__file__).parent
+    offenders = {str(p.relative_to(root)): sorted(_imports(p) & _FORBIDDEN)
+                 for p in root.rglob("*.py") if _imports(p) & _FORBIDDEN}
+    assert offenders == {}
+
+
+def test_the_governor_holds_no_beautification_modules():
+    root = Path(elegant.__file__).parent
+    moved = {"critic.py", "narrative.py", "readme.py", "proposers.py", "cns_boundary.py"}
+    assert moved.isdisjoint({p.name for p in root.rglob("*.py")})
