@@ -6,14 +6,13 @@ freezes ground truth *before* a transformation and re-measures after.
 It does not read Elegant's proposal to decide whether the proposal was
 right — it reads the tree.
 
-If the `swizzle` package is importable, `prove_self()` can run SWIZZLE's
+If the `swizzle` package is importable, `swizzle_proofs_hold()` runs SWIZZLE's
 own `prove` catalogue (SWIZZLE attacking *its* planted defects, not
 certifying Elegant).
 """
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -86,25 +85,6 @@ def attack_documentation_honesty(root: Path, before: GroundTruth) -> AttackResul
     if violations:
         return AttackResult("REJECT", tuple(violations), "documentation honesty failed")
     return AttackResult("ACCEPT", (), "no false test-count claims remain")
-
-
-def prove_self(
-    *,
-    swizzle_root: Optional[Path] = None,
-    python: str = sys.executable,
-) -> str:
-    """Run SWIZZLE's own proofs. This does not certify Elegant."""
-    env = os.environ.copy()
-    if swizzle_root:
-        env["PYTHONPATH"] = str(swizzle_root) + os.pathsep + env.get("PYTHONPATH", "")
-    proc = subprocess.run(
-        [python, "-m", "swizzle.cli", "prove"],
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=180,
-    )
-    return f"exit={proc.returncode}\n{proc.stdout[-1500:]}\n{proc.stderr[-500:]}"
 
 
 def swizzle_proofs_hold(

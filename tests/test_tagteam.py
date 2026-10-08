@@ -104,3 +104,13 @@ def test_swizzle_not_configured_is_said_out_loud(tmp_path: Path):
     _tree(target)
     result = TagTeam().run(target, findings=[])
     assert any("SWIZZLE proofs NOT RUN" in n for n in result.notes)
+
+
+def test_the_rewrite_is_one_clean_sentence(tmp_path: Path):
+    """The registry run produced '... (historical claim of 16 ...) unmodified
+    on the system python3.' The whole sentence is replaced now."""
+    _tree(tmp_path)
+    auth = grant("william", "transform", str(tmp_path.resolve()), "documentation", "clean rewrite")
+    TagTeam(proposer=documentation_honesty_proposer).run(tmp_path, findings=[], authorization=auth)
+    text = (tmp_path / "PROVENANCE.md").read_text(encoding="utf-8")
+    assert text == "The tree contains 2 `test_*` functions (an earlier version of this document gave 16).\n"

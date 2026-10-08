@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import ast
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 
 _TEST_FN = re.compile(r"^test_", re.M)
