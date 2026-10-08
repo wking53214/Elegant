@@ -37,3 +37,13 @@ def test_major_maps_to_high_not_critical():
     d = defects_from_ghost(findings)[0]
     assert d.severity.value == "high"
     assert d.human_id == "H1"
+
+
+def test_ghost_facts_reach_the_proposer_verbatim():
+    raw = {"id": "ghost-1", "severity": "minor", "status": "confirmed",
+           "summary": "s", "detector": "doc_test_count_drift",
+           "attributes": {"documented_count": "16", "static_lower_bound": "79"},
+           "evidence": {"file": "README.md", "line_start": 12}}
+    (defect,) = defects_from_ghost([raw])
+    assert defect.detector == "doc_test_count_drift" and defect.line == 12
+    assert defect.attributes["static_lower_bound"] == "79"
