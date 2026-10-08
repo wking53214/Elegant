@@ -1,5 +1,7 @@
 # Warden
 
+*Formerly Elegant. Renamed in October 2026; the role is unchanged.*
+
 The discipline of change.
 
 Warden decides whether a change to code may be made, whether it stands once
