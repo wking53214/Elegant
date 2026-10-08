@@ -150,7 +150,7 @@ its markers is Elegant's; every other section survives reruns untouched.
 - No Elegant module imports Streamline, Proposer or any other repository in the stack, and none of the beautification modules remain. **VERIFIED** by `tests/test_independence.py`.
 - TOUCHSTONE's answer key arrives, or the run says why it did not. **VERIFIED** by `tests/test_touchstone_link.py`, including a live read when `TOUCHSTONE_ROOT` is set (CI sets it).
 
-36 tests exist in this tree. 35 passed and 1 skipped on CPython 3.13 without `TOUCHSTONE_ROOT`; the skipped one is the live TOUCHSTONE read, which CI runs on 3.11 and 3.12.
+37 tests exist in this tree. 36 passed and 1 skipped on CPython 3.13 without `TOUCHSTONE_ROOT`; the skipped one is the live TOUCHSTONE read, which CI runs on 3.11 and 3.12.
 
 ## WHAT IS BEAUTIFUL
 
