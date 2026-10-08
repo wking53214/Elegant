@@ -1,23 +1,23 @@
-"""The loop: Ghost sees, Proposer proposes, Elegant decides and applies, SWIZZLE checks.
+"""The loop: Ghost sees, Drafter proposes, Warden decides and applies, SWIZZLE checks.
 
     calibrate (SWIZZLE proves its own instrument)
     repeat, up to max_cycles:
-        observe (Ghost) -> Proposer proposes -> authorize (human)
+        observe (Ghost) -> Drafter proposes -> authorize (human)
         -> suite before -> apply -> suite after (put back on failure)
         -> Ghost re-inspects
-      until the Proposer has nothing left to propose
+      until the Drafter has nothing left to propose
     SWIZZLE proofs again
     hand off ONCE to the Finisher: beautified code and the final README,
-      applied by Elegant under the same gate and put back if the suite
+      applied by Warden under the same gate and put back if the suite
       breaks or Ghost finds anything new
 
-Elegant is the only writer and the only one who says the loop is done. The
-Proposer cannot declare itself finished; it can only run out of proposals, and
-Elegant checks that Ghost agrees before calling it converged.
+Warden is the only writer and the only one who says the loop is done. The
+Drafter cannot declare itself finished; it can only run out of proposals, and
+Warden checks that Ghost agrees before calling it converged.
 
 This module refuses three self-certifying loops:
 
-    Elegant says Elegant is good.
+    Warden says Warden is good.
     Ghost Tools finds its own work correct merely because it produced it.
     SWIZZLE trusts the transformation framework without independent challenge.
 """
@@ -33,7 +33,7 @@ from typing import Dict, Optional, Sequence
 from .authorization import Authorization, Unauthorized
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
-from .roles import Facts, Finisher, Proposer
+from .roles import Facts, Finisher, Drafter
 from .suite import SuiteRun, preserved, run_suite
 from .swizzle import swizzle_proofs_hold
 
@@ -90,14 +90,14 @@ class TagTeam:
         *,
         ghost_tools_root: Optional[Path] = None,
         swizzle_root: Optional[Path] = None,
-        proposer: Optional[Proposer] = None,
+        drafter: Optional[Drafter] = None,
         finisher: Optional[Finisher] = None,
         max_cycles: int = DEFAULT_MAX_CYCLES,
         run_tests: bool = True,
     ) -> None:
         self.ghost_tools_root = ghost_tools_root
         self.swizzle_root = swizzle_root
-        self.proposer = proposer
+        self.drafter = drafter
         self.finisher = finisher
         self.max_cycles = max_cycles
         #: Rule 7. Off only for callers that measure the suite some other way;
@@ -129,11 +129,11 @@ class TagTeam:
                 converged=converged, decision=decision, notes=tuple(notes + [why]),
                 finish=finish, finished=finished, swizzle_sound=sound)
 
-        if self.proposer is None:
-            return stop("INCONCLUSIVE", "No proposer. Tag team observed only; nothing can be proposed.")
+        if self.drafter is None:
+            return stop("INCONCLUSIVE", "No drafter. Tag team observed only; nothing can be proposed.")
         if authorization is None or not authorization.granted:
             # Show what would be proposed, change nothing.
-            proposal = self.proposer.propose(target, observed, _fingerprint(target))
+            proposal = self.drafter.propose(target, observed, _fingerprint(target))
             cycle = Cycle(1, len(observed), proposal, False, "REFUSED")
             return stop("REFUSED", "Human authorization missing. Proposal stands. No write.",
                         cycles=[cycle])
@@ -145,7 +145,7 @@ class TagTeam:
         seen: set[str] = set()
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
-            proposal = self.proposer.propose(target, observed, baseline)
+            proposal = self.drafter.propose(target, observed, baseline)
             if proposal is None or not proposal.edits:
                 cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
                 converged = True
@@ -153,7 +153,7 @@ class TagTeam:
             key = _edits_key(proposal)
             if key in seen:
                 cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
-                return stop("NOT_CONVERGED", f"Cycle {number}: the Proposer repeated an earlier "
+                return stop("NOT_CONVERGED", f"Cycle {number}: the Drafter repeated an earlier "
                             "proposal, so the loop is going in circles. Stopped.", cycles)
             seen.add(key)
             cycle = self._apply(target, proposal, authorization, python, notes, number, len(observed))
@@ -167,7 +167,7 @@ class TagTeam:
         if not converged:
             return stop("NOT_CONVERGED", f"No convergence in {self.max_cycles} cycles.", cycles)
         if observed and self.ghost_tools_root is not None:
-            notes.append(f"Proposer is out of proposals but Ghost still reports {len(observed)} finding(s). "
+            notes.append(f"Drafter is out of proposals but Ghost still reports {len(observed)} finding(s). "
                          "Converged means no proposals left, not zero findings.")
 
         end_sound = self._calibrate(python, notes)
@@ -291,11 +291,11 @@ def _edits_key(proposal: Transformation) -> str:
 
 
 def _refuse_self_authorization(target: Path, authorization: Optional[Authorization]) -> None:
-    """Elegant may transform other repos. Transforming itself under its own
+    """Warden may transform other repos. Transforming itself under its own
     proposal is the self-certifying loop."""
-    if (target.name.lower() == "elegant" and authorization and authorization.granted
-            and authorization.actor.lower() in {"elegant", "self"}):
-        raise Unauthorized("Elegant cannot authorize work on itself.")
+    if (target.name.lower() == "warden" and authorization and authorization.granted
+            and authorization.actor.lower() in {"warden", "self"}):
+        raise Unauthorized("Warden cannot authorize work on itself.")
 
 
 def _snapshot(target: Path, proposal: Transformation) -> Dict[str, Optional[str]]:

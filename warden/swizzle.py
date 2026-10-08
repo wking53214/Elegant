@@ -1,12 +1,12 @@
 """SWIZZLE consumer: is the adversary's own instrument sound?
 
-SWIZZLE owns adversarial challenge. Elegant must not become SWIZZLE. What
-Elegant asks of it is one calibration question before it will write anything:
+SWIZZLE owns adversarial challenge. Warden must not become SWIZZLE. What
+Warden asks of it is one calibration question before it will write anything:
 do SWIZZLE's own planted defects still all get proven? (`swizzle prove`).
 
 The independent post-change oracle used to live here. It judges documentation,
-which is a craft question, so it moved to Streamline with the rest of the
-beautification. Elegant now receives its verdict through `elegant.craft`.
+which is a craft question, so it moved to Burnish with the rest of the
+beautification. Warden now receives its verdict through `warden.craft`.
 """
 
 from __future__ import annotations

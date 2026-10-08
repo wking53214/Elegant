@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "elegant"
+name = "warden"
 version = "0.6.0"
-description = "The discipline of change: a human grant, a green suite before and after, SWIZZLE proofs, and a durable record. What counts as better lives in Streamline."
+description = "The discipline of change: a human grant, a green suite before and after, SWIZZLE proofs, and a durable record. What counts as better lives in Burnish."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -24,16 +24,16 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/wking53214/Elegant"
+Homepage = "https://github.com/wking53214/Warden"
 
 [project.scripts]
-elegant = "elegant.cli:main"
+warden = "warden.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
 [tool.setuptools]
-packages = ["elegant", "elegant.horsemen"]
+packages = ["warden", "warden.horsemen"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

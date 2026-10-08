@@ -14,7 +14,7 @@
       "cns_representation": "none",
       "cns_seam": "none",
       "digest_model": "UNKNOWN",
-      "elegant_involvement": "tagteam with documentation_honesty_proposer; authorized by william; decision ACCEPT",
+      "warden_involvement": "tagteam with documentation_honesty_drafter; authorized by william; decision ACCEPT",
       "epistemic_model": "UNKNOWN",
       "final_sha": "eb0a363cf715f1e38acb655f8f3d7bbe7ca9da32",
       "ghost_tools_involvement": "observe + re-inspect via ghost_buster at ghost_tools 9a760269f0; 0 findings both times (ghost_buster did not flag the false count: doc_test_count_drift is one-directional and only reports a count the suite has grown past)",
@@ -28,8 +28,8 @@
       "repository": "scratch demo repository (not a corpus repo; recreated by hand, see unknown)",
       "subject_binding": "UNKNOWN",
       "swizzle_involvement": "swizzle prove at SWIZZLE fd51074c3b: 12 of 12 proofs hold, required before ACCEPT",
-      "tests_executed": "Elegant suite at 8a43c851ef: 24 passed with TOUCHSTONE_ROOT set (CPython 3.13); CI 3.11 and 3.12 green on PR #3",
-      "unknown": "2026-10-07. The demo is two test functions and a PROVENANCE.md claiming 16. It shows the loop runs end to end with all three tools live; it is not a corpus transformation, and no corpus repository has been transformed by Elegant yet."
+      "tests_executed": "Warden suite at 8a43c851ef: 24 passed with ASSAY_ROOT set (CPython 3.13); CI 3.11 and 3.12 green on PR #3",
+      "unknown": "2026-10-07. The demo is two test functions and a PROVENANCE.md claiming 16. It shows the loop runs end to end with all three tools live; it is not a corpus transformation, and no corpus repository has been transformed by Warden yet."
     },
     {
       "adapter": false,
@@ -44,7 +44,7 @@
       "cns_representation": "none",
       "cns_seam": "none",
       "digest_model": "UNKNOWN",
-      "elegant_involvement": "tagteam 0.3.0 (pre-release, branch claude/elegant-beautiful-again) with documentation_honesty_proposer; authorized by william; decision ACCEPT",
+      "warden_involvement": "tagteam 0.3.0 (pre-release, branch claude/warden-beautiful-again) with documentation_honesty_drafter; authorized by william; decision ACCEPT",
       "epistemic_model": "UNKNOWN",
       "final_sha": "ba2632fe03d4baeac767ab0f14fefa3c58564f83",
       "ghost_tools_involvement": "observe + re-inspect at ghost_tools 9a760269f0; 0 findings both times",
@@ -58,8 +58,8 @@
       "repository": "scratch demo repository 2 (not a corpus repo)",
       "subject_binding": "UNKNOWN",
       "swizzle_involvement": "swizzle prove at SWIZZLE fd51074c3b: 12 of 12 proofs hold",
-      "tests_executed": "Rule 7 gate on the target: 2 passed before, 2 passed after; Elegant's own suite 37 passed",
-      "unknown": "2026-10-07. First run with the Rule 7 gate: the target's suite ran before and after the change. Still a scratch repository; no corpus repository has been transformed by Elegant."
+      "tests_executed": "Rule 7 gate on the target: 2 passed before, 2 passed after; Warden's own suite 37 passed",
+      "unknown": "2026-10-07. First run with the Rule 7 gate: the target's suite ran before and after the change. Still a scratch repository; no corpus repository has been transformed by Warden."
     }
   ]
 }

@@ -1,6 +1,6 @@
 """Human authority boundary.
 
-Elegant proposes. A human (or a governing process acting as one) authorizes.
+Warden proposes. A human (or a governing process acting as one) authorizes.
 Nothing in this package treats a proposal as permission.
 
 UNKNOWN is not APPROVED. A missing Authorization is a refusal, not a default.
@@ -31,7 +31,7 @@ class Authorization:
     reason: str
     granted: bool
     at: str
-    policy_version: str = "elegant-0.1"
+    policy_version: str = "warden-0.1"
 
     def permits(self, operation: str, subject: str) -> bool:
         return (
@@ -64,10 +64,10 @@ def grant(
     scope: str,
     reason: str,
 ) -> Authorization:
-    if not actor.strip() or actor.strip().lower() in {"elegant", "self", "unknown"}:
+    if not actor.strip() or actor.strip().lower() in {"warden", "self", "unknown"}:
         raise Unauthorized(
-            "Elegant cannot authorize its own write. Actor must be a human "
-            "or an external governing process, not 'elegant' / 'self' / 'unknown'."
+            "Warden cannot authorize its own write. Actor must be a human "
+            "or an external governing process, not 'warden' / 'self' / 'unknown'."
         )
     if not reason.strip():
         raise Unauthorized("An authorization without a reason is not an authorization.")

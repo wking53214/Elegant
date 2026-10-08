@@ -1,7 +1,7 @@
 """Stand-ins for the two seats, with no opinion about code at all.
 
-The real ones are Proposer and Streamline. Elegant's tests must not depend on
-them (Elegant never imports either), so the governor is exercised with these:
+The real ones are Drafter and Burnish. Warden's tests must not depend on
+them (Warden never imports either), so the governor is exercised with these:
 they propose whatever edits the test hands them.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from elegant.models import FileEdit, Transformation, TransformationStatus
+from warden.models import FileEdit, Transformation, TransformationStatus
 
 
 def _transformation(target, observed, baseline, path, new_text) -> Transformation:
@@ -25,7 +25,7 @@ def _transformation(target, observed, baseline, path, new_text) -> Transformatio
         status=TransformationStatus.PROPOSED)
 
 
-class FakeProposer:
+class FakeDrafter:
     """Proposes the next text in `steps` (one per call), then runs dry."""
 
     def __init__(self, steps=("changed\n",), path="NOTE.md"):
@@ -38,7 +38,7 @@ class FakeProposer:
         return _transformation(target, observed, baseline, self.path, self.steps.pop(0))
 
 
-class StuckProposer:
+class StuckDrafter:
     """Proposes the same thing forever; the loop must notice."""
 
     def __init__(self, path="NOTE.md"):

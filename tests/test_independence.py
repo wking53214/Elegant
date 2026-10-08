@@ -1,11 +1,11 @@
-"""Elegant governs its seats; it never depends on what sits in them."""
+"""Warden governs its seats; it never depends on what sits in them."""
 
 import ast
 from pathlib import Path
 
-import elegant
+import warden
 
-_FORBIDDEN = {"streamline", "proposer", "ghost_buster", "swizzle", "touchstone"}
+_FORBIDDEN = {"burnish", "drafter", "ghost_buster", "swizzle", "assay"}
 
 
 def _imports(path: Path) -> set[str]:
@@ -18,14 +18,14 @@ def _imports(path: Path) -> set[str]:
     return names
 
 
-def test_no_elegant_module_imports_a_seat_filler():
-    root = Path(elegant.__file__).parent
+def test_no_warden_module_imports_a_seat_filler():
+    root = Path(warden.__file__).parent
     offenders = {str(p.relative_to(root)): sorted(_imports(p) & _FORBIDDEN)
                  for p in root.rglob("*.py") if _imports(p) & _FORBIDDEN}
     assert offenders == {}
 
 
 def test_the_governor_holds_no_beautification_modules():
-    root = Path(elegant.__file__).parent
-    moved = {"critic.py", "narrative.py", "readme.py", "proposers.py", "cns_boundary.py"}
+    root = Path(warden.__file__).parent
+    moved = {"critic.py", "narrative.py", "readme.py", "drafters.py", "cns_boundary.py"}
     assert moved.isdisjoint({p.name for p in root.rglob("*.py")})

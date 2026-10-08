@@ -18,7 +18,7 @@ class RegistryRow:
     baseline_sha: str
     final_sha: str = "UNKNOWN"
     branch: str = "UNKNOWN"
-    elegant_involvement: str = "none"
+    warden_involvement: str = "none"
     ghost_tools_involvement: str = "none"
     swizzle_involvement: str = "none"
     readme_rewritten: bool = False

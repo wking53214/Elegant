@@ -5,11 +5,11 @@ the target's tests at all.
 """
 from pathlib import Path
 
-from elegant.authorization import grant
-from elegant.suite import SuiteRun, preserved
-from elegant.tagteam import TagTeam
+from warden.authorization import grant
+from warden.suite import SuiteRun, preserved
+from warden.tagteam import TagTeam
 
-from fakes import FakeProposer
+from fakes import FakeDrafter
 
 
 def _repo(root: Path, test_body: str = "    assert True\n") -> None:
@@ -28,13 +28,13 @@ def _auth(root: Path):
 
 
 def _breaker():
-    """A proposer whose change alters behavior: VALUE becomes 2, and the suite checks 1."""
-    return FakeProposer(steps=("VALUE = 2\n",), path="pkg/__init__.py")
+    """A drafter whose change alters behavior: VALUE becomes 2, and the suite checks 1."""
+    return FakeDrafter(steps=("VALUE = 2\n",), path="pkg/__init__.py")
 
 
 def test_a_change_that_breaks_the_suite_is_put_back(tmp_path: Path):
     _repo(tmp_path, "    assert VALUE == 1\n")
-    result = TagTeam(proposer=_breaker()).run(tmp_path, findings=[], authorization=_auth(tmp_path))
+    result = TagTeam(drafter=_breaker()).run(tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "REJECT" and not result.applied
     assert (tmp_path / "pkg" / "__init__.py").read_text(encoding="utf-8") == "VALUE = 1\n"
     assert result.suite_before.green and result.suite_after.failed == 1
@@ -44,7 +44,7 @@ def test_a_change_that_breaks_the_suite_is_put_back(tmp_path: Path):
 def test_a_red_suite_before_the_change_means_no_write(tmp_path: Path):
     _repo(tmp_path, "    assert False\n")
     before = (tmp_path / "NOTE.md").read_text(encoding="utf-8")
-    result = TagTeam(proposer=FakeProposer()).run(
+    result = TagTeam(drafter=FakeDrafter()).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "INCONCLUSIVE" and not result.applied
     assert (tmp_path / "NOTE.md").read_text(encoding="utf-8") == before
@@ -54,7 +54,7 @@ def test_no_tests_means_no_write(tmp_path: Path):
     _repo(tmp_path)
     (tmp_path / "tests" / "test_pkg.py").unlink()
     before = (tmp_path / "NOTE.md").read_text(encoding="utf-8")
-    result = TagTeam(proposer=FakeProposer()).run(
+    result = TagTeam(drafter=FakeDrafter()).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "INCONCLUSIVE"
     assert (tmp_path / "NOTE.md").read_text(encoding="utf-8") == before
@@ -63,7 +63,7 @@ def test_no_tests_means_no_write(tmp_path: Path):
 
 def test_a_preserving_change_records_both_counts(tmp_path: Path):
     _repo(tmp_path)
-    result = TagTeam(proposer=FakeProposer()).run(
+    result = TagTeam(drafter=FakeDrafter()).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.applied
     assert result.suite_before.passed == result.suite_after.passed == 1
@@ -72,7 +72,7 @@ def test_a_preserving_change_records_both_counts(tmp_path: Path):
 
 def test_turning_the_gate_off_is_said_out_loud(tmp_path: Path):
     _repo(tmp_path)
-    result = TagTeam(proposer=FakeProposer(), run_tests=False).run(
+    result = TagTeam(drafter=FakeDrafter(), run_tests=False).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert any("Rule 7 NOT RUN" in n for n in result.notes)
 

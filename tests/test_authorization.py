@@ -1,11 +1,11 @@
-"""Authorization is a refusal by default. Elegant cannot grant itself."""
+"""Authorization is a refusal by default. Warden cannot grant itself."""
 
 from pathlib import Path
 
 import pytest
 
-from elegant.authorization import Unauthorized, grant, refuse
-from elegant.models import FileEdit, Transformation, TransformationStatus
+from warden.authorization import Unauthorized, grant, refuse
+from warden.models import FileEdit, Transformation, TransformationStatus
 
 
 def test_refuse_is_not_a_grant():
@@ -14,9 +14,9 @@ def test_refuse_is_not_a_grant():
     assert a.permits("transform", "/tmp/x") is False
 
 
-def test_elegant_cannot_authorize_itself():
+def test_warden_cannot_authorize_itself():
     with pytest.raises(Unauthorized):
-        grant("elegant", "transform", "/tmp/x", "docs", "because")
+        grant("warden", "transform", "/tmp/x", "docs", "because")
     with pytest.raises(Unauthorized):
         grant("self", "transform", "/tmp/x", "docs", "because")
     with pytest.raises(Unauthorized):

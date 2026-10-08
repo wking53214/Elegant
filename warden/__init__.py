@@ -1,10 +1,10 @@
-"""Elegant: the discipline of change.
+"""Warden: the discipline of change.
 
 WHAT THIS IS
     The governor of a code change. It decides whether a change may be made,
     whether it stands, and what is recorded. It does not decide what makes code
-    a good fix or beautiful code look like; a Proposer (in the loop) and a
-    Finisher (once, after it) do, through the seats in `elegant.roles`.
+    a good fix or beautiful code look like; a Drafter (in the loop) and a
+    Finisher (once, after it) do, through the seats in `warden.roles`.
 
 WHAT IT OWNS
     Transformation proposals as data, the human authorization boundary, the
@@ -13,7 +13,7 @@ WHAT IT OWNS
     becoming any of them.
 
 WHAT IT DOES NOT OWN
-    The proposals (Proposer) and the beautifying and final README (Streamline). Forensic inspection (Ghost
+    The proposals (Drafter) and the beautifying and final README (Burnish). Forensic inspection (Ghost
     Tools). Adversarial challenge (SWIZZLE). Runtime governance contracts
     (CNS). Live admission, decision, custody.
 
@@ -22,13 +22,13 @@ WHAT IT MUST NEVER DO
     Certify itself.
     Modify CNS.
     Convert UNKNOWN into APPROVED.
-    Let a Proposer or Finisher's good opinion outvote a red suite or a missing grant.
+    Let a Drafter or Finisher's good opinion outvote a red suite or a missing grant.
 """
 
 from .epistemic import EpistemicState
 from .models import Defect, DefectLifecycle, Transformation, TransformationStatus
 from .authorization import Authorization, Unauthorized
-from .roles import Facts, Finisher, Proposer
+from .roles import Facts, Finisher, Drafter
 from .tagteam import TagTeam, TagTeamResult
 from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
@@ -42,7 +42,7 @@ __all__ = [
     "TransformationStatus",
     "Authorization",
     "Unauthorized",
-    "Proposer",
+    "Drafter",
     "Finisher",
     "Facts",
     "TagTeam",

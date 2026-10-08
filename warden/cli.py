@@ -1,9 +1,9 @@
-"""elegant — govern a change: observe, authorize, gate on the suite, record.
+"""warden — govern a change: observe, authorize, gate on the suite, record.
 
-Elegant does not decide what a good fix or good code looks like. A Proposer
-(in the loop) and a Finisher (once, after it) do; see `elegant.roles`.
-`tagteam --proposer MODULE:FACTORY --finisher MODULE:FACTORY` names them.
-Without a proposer the loop can only observe. Writes require --authorize ACTOR --reason TEXT. There is no
+Warden does not decide what a good fix or good code looks like. A Drafter
+(in the loop) and a Finisher (once, after it) do; see `warden.roles`.
+`tagteam --drafter MODULE:FACTORY --finisher MODULE:FACTORY` names them.
+Without a drafter the loop can only observe. Writes require --authorize ACTOR --reason TEXT. There is no
 default actor.
 """
 
@@ -23,15 +23,15 @@ from .tagteam import TagTeam
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="elegant")
-    parser.add_argument("--version", action="version", version=f"elegant {__version__}")
+    parser = argparse.ArgumentParser(prog="warden")
+    parser.add_argument("--version", action="version", version=f"warden {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_t = sub.add_parser("tagteam", help="loop: observe → propose → apply → re-inspect, until converged; then finish once")
     p_t.add_argument("path", type=Path)
     p_t.add_argument("--ghost-root", type=Path, default=None)
-    p_t.add_argument("--proposer", default=None, metavar="MODULE:FACTORY",
-                     help="in the loop: proposes fixes, e.g. proposer.seat:Proposer")
+    p_t.add_argument("--drafter", default=None, metavar="MODULE:FACTORY",
+                     help="in the loop: proposes fixes, e.g. drafter.seat:Drafter")
     p_t.add_argument("--finisher", default=None, metavar="MODULE:FACTORY",
                      help="after the loop, once: beautifies and writes the final README")
     p_t.add_argument("--max-cycles", type=int, default=10)
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     p_t.add_argument("--reason", default="")
     p_t.add_argument("--scope", default="documentation")
 
-    p_a = sub.add_parser("audit", help="ELEGANT_AUDIT.md: Ghost findings under durable IDs (Rules 5, 9)")
+    p_a = sub.add_parser("audit", help="WARDEN_AUDIT.md: Ghost findings under durable IDs (Rules 5, 9)")
     p_a.add_argument("path", type=Path)
     p_a.add_argument("--ghost-root", type=Path, default=None)
     p_a.add_argument("--from-ghost", type=Path, default=None, help="findings JSON instead of a live scan")
@@ -67,16 +67,16 @@ def _tagteam(args) -> int:
             auth = grant(args.authorize, "transform", str(Path(args.path).resolve()),
                          args.scope, args.reason)
         except Unauthorized as e:
-            print(f"elegant: {e}", file=sys.stderr)
+            print(f"warden: {e}", file=sys.stderr)
             return 2
     try:
-        proposer = _load_seat(args.proposer)
+        drafter = _load_seat(args.drafter)
         finisher = _load_seat(args.finisher)
     except (ImportError, AttributeError, ValueError) as e:
-        print(f"elegant: cannot load seat: {e}", file=sys.stderr)
+        print(f"warden: cannot load seat: {e}", file=sys.stderr)
         return 2
     team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
-                   proposer=proposer, finisher=finisher, max_cycles=args.max_cycles)
+                   drafter=drafter, finisher=finisher, max_cycles=args.max_cycles)
     result = team.run(args.path, authorization=auth, findings=findings)
     payload = {
         "decision": result.decision,
@@ -91,7 +91,7 @@ def _tagteam(args) -> int:
     }
     print(json.dumps(payload, indent=2))
     if result.swizzle_sound is False:
-        print("elegant: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
+        print("warden: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
         return 2
     return 0 if result.decision in {"ACCEPT", "INCONCLUSIVE", "REFUSED"} else 1
 
@@ -114,7 +114,7 @@ def _audit(args) -> int:
     elif args.ghost_root:
         findings = ghost_scan(root, ghost_tools_root=args.ghost_root)
     else:
-        print("elegant: audit needs --ghost-root or --from-ghost; an audit of nothing "
+        print("warden: audit needs --ghost-root or --from-ghost; an audit of nothing "
               "would read as a clean repository", file=sys.stderr)
         return 2
     path = root / audit_file.FILENAME
@@ -126,7 +126,7 @@ def _audit(args) -> int:
     try:
         auth = grant(args.authorize, "audit", str(root), "documentation", args.reason)
     except Unauthorized as e:
-        print(f"elegant: {e}", file=sys.stderr)
+        print(f"warden: {e}", file=sys.stderr)
         return 2
     path.write_text(updated, encoding="utf-8")
     print(f"wrote {path} (authorized by {auth.actor})")
