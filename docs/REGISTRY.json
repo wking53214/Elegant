@@ -1,0 +1,35 @@
+{
+  "cns_modified": "NO",
+  "rows": [
+    {
+      "adapter": false,
+      "adversarial_validation_executed": "documentation-honesty oracle: ACCEPT, 0 violations; SWIZZLE instrument check 12/12",
+      "architectural_debt": "UNKNOWN",
+      "authoritative_path": "UNKNOWN",
+      "authority_model": "UNKNOWN",
+      "baseline_sha": "4ddd5579651eb9b6dd199948f66f8dc51f1d0c95",
+      "branch": "master (local only)",
+      "cns_integration_type": "none",
+      "cns_involvement": "none",
+      "cns_representation": "none",
+      "cns_seam": "none",
+      "digest_model": "UNKNOWN",
+      "elegant_involvement": "tagteam with documentation_honesty_proposer; authorized by william; decision ACCEPT",
+      "epistemic_model": "UNKNOWN",
+      "final_sha": "eb0a363cf715f1e38acb655f8f3d7bbe7ca9da32",
+      "ghost_tools_involvement": "observe + re-inspect via ghost_buster at ghost_tools 9a760269f0; 0 findings both times (ghost_buster did not flag the false count: doc_test_count_drift is one-directional and only reports a count the suite has grown past)",
+      "internal_convergence": false,
+      "known_defects": "the rewritten PROVENANCE sentence keeps its old tail ('... unmodified on the system python3') and reads badly",
+      "native_representation": "UNKNOWN",
+      "provenance_model": "UNKNOWN",
+      "push_status": "not pushed: scratch repository",
+      "readme_rewritten": false,
+      "remote_verification": "none: scratch repository",
+      "repository": "scratch demo repository (not a corpus repo; recreated by hand, see unknown)",
+      "subject_binding": "UNKNOWN",
+      "swizzle_involvement": "swizzle prove at SWIZZLE fd51074c3b: 12 of 12 proofs hold, required before ACCEPT",
+      "tests_executed": "Elegant suite at 8a43c851ef: 24 passed with TOUCHSTONE_ROOT set (CPython 3.13); CI 3.11 and 3.12 green on PR #3",
+      "unknown": "2026-10-07. The demo is two test functions and a PROVENANCE.md claiming 16. It shows the loop runs end to end with all three tools live; it is not a corpus transformation, and no corpus repository has been transformed by Elegant yet."
+    }
+  ]
+}
