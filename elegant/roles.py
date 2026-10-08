@@ -19,10 +19,28 @@ Elegant's data shapes. The tests prove it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Protocol, runtime_checkable
 
 from .models import Defect, Transformation
+from .suite import SuiteRun
+
+
+@dataclass(frozen=True)
+class Facts:
+    """What Elegant and Ghost measured at the converged state, handed to the Finisher.
+
+    The Finisher counts and detects nothing itself. If it states a test result
+    or a remaining problem, it is quoting this.
+    """
+
+    #: The target's own suite, run by Elegant after the loop. None: it was not run.
+    suite: Optional[SuiteRun]
+    #: What Ghost still reports. Converged means no proposals are left, not that this is empty.
+    remaining: tuple[Defect, ...]
+    #: How many loop cycles ran.
+    cycles: int
 
 
 @runtime_checkable
@@ -36,4 +54,4 @@ class Proposer(Protocol):
 class Finisher(Protocol):
     """Called once, after the loop has converged. Returns None if nothing to finish."""
 
-    def finish(self, target: Path, baseline: str) -> Optional[Transformation]: ...
+    def finish(self, target: Path, baseline: str, facts: Facts) -> Optional[Transformation]: ...

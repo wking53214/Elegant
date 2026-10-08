@@ -18,11 +18,10 @@ order: did a person grant this, are SWIZZLE's own proofs sound, is the target's
 test suite green, did it stay green after the change, and does Ghost agree
 nothing new appeared. Any "no" stops the change or puts it back. The loop
 cycles until the Proposer has nothing left to propose (or a cycle limit is
-hit). Only then does Elegant hand the code, once, to the Finisher, which
-beautifies it and writes the final README. The Finisher's change goes through
+hit). Only then does Elegant hand the code, once, to the Finisher, together with the facts it measured (the suite result and what Ghost still reports), so the Finisher counts and detects nothing itself. The Finisher beautifies the code and writes the final README. The Finisher's change goes through
 the same gate.
 
-Version `0.5.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
+Version `0.6.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
 
 ## WHY IT EXISTS
 
@@ -150,7 +149,7 @@ its markers is Elegant's; every other section survives reruns untouched.
 - No Elegant module imports Streamline, Proposer or any other repository in the stack, and none of the beautification modules remain. **VERIFIED** by `tests/test_independence.py`.
 - TOUCHSTONE's answer key arrives, or the run says why it did not. **VERIFIED** by `tests/test_touchstone_link.py`, including a live read when `TOUCHSTONE_ROOT` is set (CI sets it).
 
-37 tests exist in this tree. 36 passed and 1 skipped on CPython 3.13 without `TOUCHSTONE_ROOT`; the skipped one is the live TOUCHSTONE read, which CI runs on 3.11 and 3.12.
+38 tests exist in this tree. 37 passed and 1 skipped on CPython 3.13 without `TOUCHSTONE_ROOT`; the skipped one is the live TOUCHSTONE read, which CI runs on 3.11 and 3.12.
 
 ## WHAT IS BEAUTIFUL
 

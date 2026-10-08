@@ -28,11 +28,11 @@ WHAT IT MUST NEVER DO
 from .epistemic import EpistemicState
 from .models import Defect, DefectLifecycle, Transformation, TransformationStatus
 from .authorization import Authorization, Unauthorized
-from .roles import Finisher, Proposer
+from .roles import Facts, Finisher, Proposer
 from .tagteam import TagTeam, TagTeamResult
 from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "EpistemicState",
@@ -44,6 +44,7 @@ __all__ = [
     "Unauthorized",
     "Proposer",
     "Finisher",
+    "Facts",
     "TagTeam",
     "TagTeamResult",
     "HorsemenWorkflow",
