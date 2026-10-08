@@ -12,13 +12,17 @@ rewriting bot. Nothing is written without a named human.
 
 ## WHAT THIS IS
 
-A governor. Given a proposed change from a craft, Elegant asks, in order:
-did a person grant this, are SWIZZLE's own proofs sound, is the target's test
-suite green, did the suite stay green after the change, and did the craft's
-independent oracle accept the result. Any "no" stops the change or puts it
-back.
+A governor, and the only thing in the stack that writes. It runs a loop. Ghost
+Tools reports what is wrong, the Proposer proposes one fix, and Elegant asks, in
+order: did a person grant this, are SWIZZLE's own proofs sound, is the target's
+test suite green, did it stay green after the change, and does Ghost agree
+nothing new appeared. Any "no" stops the change or puts it back. The loop
+cycles until the Proposer has nothing left to propose (or a cycle limit is
+hit). Only then does Elegant hand the code, once, to the Finisher, which
+beautifies it and writes the final README. The Finisher's change goes through
+the same gate.
 
-Version `0.4.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
+Version `0.5.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
 
 ## WHY IT EXISTS
 
@@ -36,12 +40,12 @@ opinion about what better code looks like. The opinion moved to Streamline on
 - Rule 7, the test gate: the target's own suite before and after every write
 - Rule 9, the audit file: `ELEGANT_AUDIT.md`, Ghost findings under IDs that never change meaning
 - The SWIZZLE proof gate: SWIZZLE's own proofs must hold before anything is accepted
-- The tag-team loop that *calls* Ghost Tools, SWIZZLE and a craft without becoming any of them
+- The tag-team loop that *calls* Ghost Tools, SWIZZLE, a Proposer and a Finisher without becoming any of them
 - The Four Horsemen interface: typed handoffs between TOUCHSTONE, Ghost Tools, SWIZZLE and Elegant
 
 ## WHAT IT DOES NOT OWN
 
-- The opinion about better code: naming, narrative, comments, guards, README writing (Streamline)
+- Which fix to propose (Proposer), and the beautifying and final README (Streamline)
 - Forensic detectors, ledgers, mutation (Ghost Tools)
 - Independent oracles and ground truth (SWIZZLE)
 - Row shapes and interoperability contracts (CNS), which Elegant never modifies
@@ -54,33 +58,28 @@ opinion about what better code looks like. The opinion moved to Streamline on
 CODEBASE
    │
    ▼
-GHOST TOOLS   observe / find     (findings keep ghost-* identity)
+SWIZZLE       proves its own instrument first; nothing is written if its proofs fail
    │
    ▼
-SWIZZLE       swizzle prove: its own proofs must hold, or nothing is written
+┌─ THE LOOP, repeated until the Proposer has nothing left ───────────────┐
+│  GHOST TOOLS   observe / find   (findings keep ghost-* identity)       │
+│  PROPOSER      proposes one change (data, never a write)               │
+│  human grant   Authorization.granted == True                           │
+│  TARGET SUITE  green before (Rule 7)                                   │
+│  ELEGANT       applies the change: the one point a file is written     │
+│  TARGET SUITE  green after, or the change is put back                  │
+│  GHOST TOOLS   re-inspect                                              │
+└─────────────────────────────────────────────────────────────────────────┘
+   │  converged (or NOT_CONVERGED at the cycle limit: no hand-off)
+   ▼
+SWIZZLE       proofs checked again
    │
    ▼
-A CRAFT       freeze, review, propose   (Streamline)
-   │              ▲
-   │              └── human Authorization.granted == True
+FINISHER      once: beautified code and the final README (Streamline)
+   │          Elegant applies it under the same gate; the suite breaking or
+   │          any new Ghost finding puts it back
    ▼
-TARGET SUITE  must be green before the change (Rule 7)
-   │
-   ▼
-TRANSFORM     the one point where a file is written
-   │
-   ▼
-TARGET SUITE  still green after, or the change is put back (Rule 7)
-   │
-   ▼
-GHOST TOOLS   re-inspect
-   │
-   ▼
-THE CRAFT'S   independent oracle, then its review
-ORACLE
-   │
-   ▼
-ACCEPT / REJECT
+ACCEPT / FINISH_REJECTED
 ```
 
 | module | owns |
@@ -88,7 +87,7 @@ ACCEPT / REJECT
 | `elegant.epistemic` | GUARANTEED / VERIFIED / IMPLEMENTED / DESIGNED / ASSUMED / UNKNOWN / NOT_IMPLEMENTED / INTENTIONALLY_NOT_PROVIDED |
 | `elegant.models` | Defect, Transformation, FileEdit; consumes `ghost-*` IDs |
 | `elegant.authorization` | grant / refuse; self-grant is Unauthorized |
-| `elegant.craft` | the four questions a craft answers: freeze, review, propose, attack |
+| `elegant.roles` | the two seats: Proposer (in the loop) and Finisher (once, after it) |
 | `elegant.tagteam` | the loop |
 | `elegant.suite` | Rule 7: runs the target's own test suite before and after a change |
 | `elegant.audit` | Rules 5 and 9: `ELEGANT_AUDIT.md` |
@@ -100,11 +99,12 @@ ACCEPT / REJECT
 
 ## KEY INTERNAL CONCEPTS
 
-- **Governor, not judge.** A craft's "good enough" never outvotes a red suite, a missing grant, or a failed oracle.
+- **Governor, not judge.** A Proposer or Finisher never outvotes a red suite, a missing grant, or a new Ghost finding.
+- **Converged is not clean.** The loop ends when the Proposer has nothing left, not when Ghost reports zero; the notes say how many findings remain.
 - **One intentional change.** Ambiguous replacements refuse.
 - **Identity.** Ghost's hash is the machine identity. C1/H1/M1/L1 are labels.
 - **Self-certification is a bug.** Elegant cannot grant actor `elegant` / `self` / `unknown`.
-- **One-way dependency.** Streamline imports Elegant. Elegant never imports Streamline.
+- **One-way dependency.** Proposer and Streamline import Elegant's data shapes. Elegant imports neither.
 
 ## IMPORTANT BOUNDARIES
 
@@ -117,8 +117,10 @@ Running a repository's tests runs its code, so Rule 7 happens only after a human
 CLI over a git work tree. Default is read-only. Writes require
 `--authorize ACTOR --reason TEXT`.
 
-`elegant tagteam PATH --craft streamline.craft:Streamline --ghost-root GHOST_TOOLS --swizzle-root SWIZZLE`
-runs the whole loop. Without `--craft` it can only observe (`INCONCLUSIVE`).
+`elegant tagteam PATH --proposer MODULE:FACTORY --finisher MODULE:FACTORY --ghost-root GHOST_TOOLS --swizzle-root SWIZZLE`
+runs the whole loop and the hand-off (`--max-cycles`, default 10). Without
+`--proposer` it can only observe (`INCONCLUSIVE`). Without `--finisher` it stops
+when the loop converges.
 Without `--authorize` it proposes and writes nothing (`REFUSED`). If SWIZZLE's
 own proofs do not hold, nothing is written and the command exits 2. Without
 `--swizzle-root` the notes say `SWIZZLE proofs NOT RUN` and the adversary is
@@ -139,15 +141,16 @@ its markers is Elegant's; every other section survives reruns untouched.
 
 - Transformation apply refuses without a grant. **VERIFIED** by `tests/test_authorization.py`.
 - Ghost IDs are preserved. **VERIFIED** by `tests/test_ghost_identity.py`.
-- Tag team without a grant does not write; without a craft it only observes. **VERIFIED** by `tests/test_tagteam.py`.
-- A failed oracle outvotes a good review, and a bad review outvotes a good oracle. **VERIFIED** by `tests/test_tagteam.py`.
+- Tag team without a grant does not write; without a proposer it only observes. **VERIFIED** by `tests/test_tagteam.py`.
+- The loop cycles until the proposer runs dry, stops at the cycle limit, and notices a proposer going in circles. **VERIFIED** by `tests/test_tagteam.py`.
+- The finisher runs once, only after convergence, and a finishing change that breaks the suite is put back while the loop's result stands. **VERIFIED** by `tests/test_tagteam.py`.
 - SWIZZLE's proofs failing stops the write; not configuring SWIZZLE is said out loud. **VERIFIED** by `tests/test_tagteam.py`.
 - A change that breaks the target's suite is put back; a red or empty suite means nothing is written. **VERIFIED** by `tests/test_rule7_suite_gate.py`.
 - Audit IDs survive reruns, are never reused, and a Fixed defect that returns is reopened under its own ID. **VERIFIED** by `tests/test_audit.py`.
-- No Elegant module imports a craft, and none of the beautification modules remain. **VERIFIED** by `tests/test_independence.py`.
+- No Elegant module imports Streamline, Proposer or any other repository in the stack, and none of the beautification modules remain. **VERIFIED** by `tests/test_independence.py`.
 - TOUCHSTONE's answer key arrives, or the run says why it did not. **VERIFIED** by `tests/test_touchstone_link.py`, including a live read when `TOUCHSTONE_ROOT` is set (CI sets it).
 
-35 tests exist in this tree. 34 passed and 1 skipped on CPython 3.13 without `TOUCHSTONE_ROOT`; the skipped one is the live TOUCHSTONE read, which CI runs on 3.11 and 3.12.
+37 tests exist in this tree. 36 passed and 1 skipped on CPython 3.13 without `TOUCHSTONE_ROOT`; the skipped one is the live TOUCHSTONE read, which CI runs on 3.11 and 3.12.
 
 ## WHAT IS BEAUTIFUL
 
@@ -167,12 +170,12 @@ authorized change, oracle ACCEPT, on a scratch demo. Recorded in
 
 ## WHAT IS NOT PROVEN
 
-- The loop run live with Streamline as the craft, on any repository. It has not been run since the split.
+- The loop run live with a real Proposer and Finisher, on any repository. It has not been run since the split.
 - Live `ghost-buster` + `elegant tagteam` + `swizzle prove` on a corpus repository.
 
 ## WHAT DOES NOT WORK
 
-- Elegant makes no change by itself. With no craft it cannot propose anything.
+- Elegant makes no change by itself. With no proposer it cannot propose anything.
 - `ELEGANT_AUDIT.md`'s design analogy, layer map and invariants are written by
   a person; Elegant leaves them `UNKNOWN` rather than invent them.
 - Beauty is not scored here or anywhere in the corpus.
@@ -198,7 +201,7 @@ authorized change, oracle ACCEPT, on a scratch demo. Recorded in
 
 ## WHAT REMAINS OUTSTANDING
 
-A live run with Streamline as the craft, recorded in the registry.
+A live run with Proposer and Streamline in their seats, recorded in the registry.
 
 ## CLAIMS VS REALITY
 

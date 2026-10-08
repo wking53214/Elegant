@@ -4,14 +4,15 @@
 
 The governor of code change. Decides whether a change may be made and whether
 it stands: a human grant, a green suite before and after, SWIZZLE's proofs,
-a durable record. Never silently rewrites; never certifies itself. What counts
-as better code is Streamline's job, not Elegant's.
+a durable record. Never silently rewrites; never certifies itself. Which fix to
+propose is the Proposer's job; beautifying and the final README are Streamline's.
 
 | Related | Role |
 |---------|------|
 | [ghost_tools](https://github.com/wking53214/ghost_tools) | Forensic observation. Owns findings, baselines, ledgers. |
 | [SWIZZLE](https://github.com/wking53214/SWIZZLE) | Adversarial challenge. Owns independent oracles and ground truth. Its proofs must hold before Elegant ACCEPTs. |
-| [Streamline](https://github.com/wking53214/streamline) | The craft. Knows what better code is; plugs into Elegant through `elegant.craft`. Imports Elegant; Elegant never imports it. |
+| Proposer (github.com/wking53214/Proposer) | In the loop. Proposes one fix at a time as data; never writes. Plugs into Elegant through `elegant.roles`. |
+| [Streamline](https://github.com/wking53214/streamline) | The finisher. Runs once, after the loop converges: beautifies the code and writes the final README with the critic's commentary. Plugs into Elegant through `elegant.roles`. Imports Elegant; Elegant never imports it. |
 | [TOUCHSTONE](https://github.com/wking53214/TOUCHSTONE) | Specimen answer key, read from `touchstone_production/registry.json`. |
 | CNS (private) | Interoperability contracts. Elegant may analyse a seam. Elegant never modifies CNS. |
 
@@ -24,22 +25,19 @@ Assurance: ghost_tools · Elegant · SWIZZLE · TOUCHSTONE
 CODEBASE
    │
    ▼
-GHOST TOOLS  observe / find
-   │
+┌─ LOOP (repeat until converged) ──────────────┐
+│ GHOST TOOLS  reports what is wrong           │
+│ PROPOSER     proposes one fix                │
+│ ELEGANT      authorize / gate / apply        │
+│ GHOST TOOLS  re-inspect                      │
+│ SWIZZLE      calibrated and checked          │
+└──────────────────────────────────────────────┘
+   │ converged
    ▼
-STREAMLINE   propose (what better means)
-   │
+STREAMLINE   once: beautify + final README + critic's commentary
+   │          (applied by Elegant under the same gate)
    ▼
-ELEGANT      authorize / gate on the suite / transform
-   │
-   ▼
-GHOST TOOLS  re-inspect
-   │
-   ▼
-SWIZZLE      attack
-   │
-   ▼
-ACCEPT / REJECT
+ACCEPT / FINISH_REJECTED
 ```
 
 Elegant does not replace Ghost Tools. Elegant does not replace SWIZZLE.

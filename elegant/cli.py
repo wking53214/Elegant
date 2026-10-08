@@ -1,8 +1,9 @@
 """elegant — govern a change: observe, authorize, gate on the suite, record.
 
-Elegant does not decide what better means. A craft does (see `elegant.craft`),
-and `tagteam --craft MODULE:FACTORY` names which one. Without a craft the loop
-can only observe. Writes require --authorize ACTOR --reason TEXT. There is no
+Elegant does not decide what a good fix or good code looks like. A Proposer
+(in the loop) and a Finisher (once, after it) do; see `elegant.roles`.
+`tagteam --proposer MODULE:FACTORY --finisher MODULE:FACTORY` names them.
+Without a proposer the loop can only observe. Writes require --authorize ACTOR --reason TEXT. There is no
 default actor.
 """
 
@@ -26,11 +27,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"elegant {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_t = sub.add_parser("tagteam", help="observe → propose/apply (needs a craft) → re-inspect → attack")
+    p_t = sub.add_parser("tagteam", help="loop: observe → propose → apply → re-inspect, until converged; then finish once")
     p_t.add_argument("path", type=Path)
     p_t.add_argument("--ghost-root", type=Path, default=None)
-    p_t.add_argument("--craft", default=None, metavar="MODULE:FACTORY",
-                     help="who decides what better means, e.g. streamline.craft:Streamline")
+    p_t.add_argument("--proposer", default=None, metavar="MODULE:FACTORY",
+                     help="in the loop: proposes fixes, e.g. proposer.seat:Proposer")
+    p_t.add_argument("--finisher", default=None, metavar="MODULE:FACTORY",
+                     help="after the loop, once: beautifies and writes the final README")
+    p_t.add_argument("--max-cycles", type=int, default=10)
     p_t.add_argument("--swizzle-root", type=Path, default=None,
                      help="SWIZZLE checkout; its proofs must hold before anything is ACCEPTed")
     p_t.add_argument("--from-ghost", type=Path, default=None, help="findings JSON instead of a live scan")
@@ -66,27 +70,24 @@ def _tagteam(args) -> int:
             print(f"elegant: {e}", file=sys.stderr)
             return 2
     try:
-        craft = _load_craft(args.craft)
+        proposer = _load_seat(args.proposer)
+        finisher = _load_seat(args.finisher)
     except (ImportError, AttributeError, ValueError) as e:
-        print(f"elegant: cannot load craft {args.craft!r}: {e}", file=sys.stderr)
+        print(f"elegant: cannot load seat: {e}", file=sys.stderr)
         return 2
-    team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root, craft=craft)
+    team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
+                   proposer=proposer, finisher=finisher, max_cycles=args.max_cycles)
     result = team.run(args.path, authorization=auth, findings=findings)
     payload = {
         "decision": result.decision,
+        "converged": result.converged,
+        "cycles": [{"number": c.number, "outcome": c.outcome, "observed": c.observed}
+                   for c in result.cycles],
+        "finished": result.finished,
         "notes": list(result.notes),
         "observed": [d.identity for d in result.observed],
         "reobserved": [d.identity for d in result.reobserved],
-        "attack": None if result.attack is None else {
-            "judgement": result.attack.judgement,
-            "violations": list(result.attack.violations),
-            "notes": result.attack.notes,
-        },
-        "review_before": None if result.review_before is None else result.review_before.verdict,
-        "review_after": None if result.review_after is None else result.review_after.verdict,
         "swizzle_sound": result.swizzle_sound,
-        "suite_before": None if result.suite_before is None else result.suite_before.describe(),
-        "suite_after": None if result.suite_after is None else result.suite_after.describe(),
     }
     print(json.dumps(payload, indent=2))
     if result.swizzle_sound is False:
@@ -95,8 +96,8 @@ def _tagteam(args) -> int:
     return 0 if result.decision in {"ACCEPT", "INCONCLUSIVE", "REFUSED"} else 1
 
 
-def _load_craft(spec):
-    """The craft named as MODULE:FACTORY, built with no arguments; None if not named."""
+def _load_seat(spec):
+    """The seat-filler named as MODULE:FACTORY, built with no arguments; None if not named."""
     if not spec:
         return None
     module_name, _, attr = spec.partition(":")

@@ -10,7 +10,7 @@ only when no Ghost identity exists, and they are labels, not a second authority.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
@@ -97,6 +97,11 @@ class Defect:
     file: Optional[str] = None
     epistemic: EpistemicState = EpistemicState.UNKNOWN
     ghost_status: Optional[str] = None  # CONFIRMED/REASONED/… preserved verbatim
+    #: What Ghost said, verbatim, so a Proposer can act on Ghost's own facts
+    #: instead of re-measuring the tree or parsing the summary sentence.
+    detector: Optional[str] = None
+    line: Optional[int] = None
+    attributes: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def identity(self) -> str:
@@ -253,6 +258,9 @@ def defects_from_ghost(findings: Sequence[Mapping[str, Any]]) -> tuple[Defect, .
                 file=ev.get("file"),
                 epistemic=epistemic,
                 ghost_status=status,
+                detector=raw.get("detector"),
+                line=ev.get("line_start"),
+                attributes=dict(raw.get("attributes") or {}),
             )
         )
     return tuple(out)
