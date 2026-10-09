@@ -81,3 +81,16 @@ class RemovingDrafter:
             known_defects=(defect,), transformation_scope="code", baseline_reference=baseline,
             evidence=(), edits=(FileEdit(path=self.path, kind="delete", new=""),),
             status=TransformationStatus.PROPOSED)
+
+
+class FakeJudge:
+    """Says what it is told to, and keeps the evidence it was handed."""
+
+    def __init__(self, decision="ACCEPT", reasons=("test",)):
+        self.decision, self.reasons, self.evidence, self.calls = decision, reasons, None, 0
+
+    def decide(self, evidence):
+        from warden.roles import Verdict
+        self.calls += 1
+        self.evidence = evidence
+        return Verdict(self.decision, tuple(self.reasons), "fake")

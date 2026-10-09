@@ -42,3 +42,36 @@ def swizzle_proofs_hold(
     lines = [ln for ln in proc.stdout.splitlines() if "proofs hold" in ln]
     summary = lines[-1].strip() if lines else (proc.stderr.strip().splitlines() or ["no output"])[-1]
     return proc.returncode == 0 and bool(lines), f"SWIZZLE proofs: {summary}"
+
+
+def governor_attacks(
+    *,
+    swizzle_root: Path,
+    warden_root: Path,
+    python: str = sys.executable,
+) -> Optional[tuple[dict, ...]]:
+    """SWIZZLE's report on attacks against this governor, or None if they could not run.
+
+    Report only: each item says whether an invariant held. None is "not
+    measured", and a caller must not read it as "no problems".
+    """
+    import json
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(swizzle_root) + os.pathsep + env.get("PYTHONPATH", "")
+    try:
+        proc = subprocess.run(
+            [python, "-m", "swizzle.cli", "governor", "--warden", str(warden_root), "--json"],
+            capture_output=True, text=True, env=env, timeout=900,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode not in (0, 1):
+        return None
+    try:
+        items = json.loads(proc.stdout)
+    except ValueError:
+        return None
+    if not items or any(i.get("status") == "not_run" for i in items):
+        return None
+    return tuple({"scenario": i["scenario"], "severity": i["severity"], "status": i["status"]} for i in items)
