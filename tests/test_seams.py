@@ -128,8 +128,11 @@ def test_a_documentation_grant_cannot_change_code(tmp_path):
     _repo(tmp_path)
     result = _run(tmp_path, Once(lambda t: _t(t, FileEdit("pkg/__init__.py", "write", "VALUE = 1\nX = 2\n", ""))),
                   scope="documentation")
-    assert result.decision == "REJECT" and any("outside the grant's scope" in n for n in result.notes)
+    # Out of scope and citing no defect: the proposal is declined and nothing is written (it used to
+    # end the run as REJECT). The code is untouched either way, which is what this test is for.
+    assert result.cycles[0].outcome == "DECLINED" and any("outside the grant's scope" in n for n in result.notes)
     assert (tmp_path / "pkg" / "__init__.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert not result.applied
 
 
 def test_a_documentation_grant_can_still_change_prose(tmp_path):

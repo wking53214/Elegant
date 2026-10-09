@@ -32,7 +32,13 @@ from .roles import Facts, Finisher, Drafter
 from .tagteam import TagTeam, TagTeamResult
 from .horsemen import HorsemenWorkflow, ChangeClass, ScopedGrant
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
+
+#: The version of the shapes other repositories build against: Evidence, Verdict, Facts and
+#: Transformation. Bumped only when one of them changes in a way that breaks a seat written for
+#: the old shape. A seat can declare `requires_contract = "1"`; `warden tagteam` refuses a seat
+#: whose declared contract is not this one.
+CONTRACT = "1"
 
 __all__ = [
     "EpistemicState",
@@ -51,4 +57,5 @@ __all__ = [
     "ChangeClass",
     "ScopedGrant",
     "__version__",
+    "CONTRACT",
 ]

@@ -232,8 +232,9 @@ def violation(target: Path, proposal: Transformation, auth: Authorization) -> Op
 
     kind is "escape" (outside the target, or inside version control, an
     environment or a cache: hostile or broken, stop everything) or "refused"
-    (out of scope, a judging file, a file that is not UTF-8, vendored or
-    generated code: decline this one change).
+    (a judging file, a file that is not UTF-8, vendored or generated code:
+    decline this one change) or "scope" (the only thing wrong is that an edit is
+    outside the grant's scope: nothing else about the proposal is objectionable).
     """
     for edit in proposal.edits:
         if not inside(target, edit.path):
@@ -243,6 +244,7 @@ def violation(target: Path, proposal: Transformation, auth: Authorization) -> Op
             return "escape", (f"edit path {edit.path!r} is inside version control, an environment or a "
                               "cache, which no change may touch")
     code_scope = auth.scope.strip().lower() in {"code", "all"}
+    out_of_scope: Optional[tuple[str, str]] = None
     for edit in proposal.edits:
         path = Path(target) / edit.path
         if path.is_file() and not textio.is_decodable(path):
@@ -253,7 +255,8 @@ def violation(target: Path, proposal: Transformation, auth: Authorization) -> Op
         if is_protected(edit.path) and not format_only(target, edit):
             return "refused", (f"{edit.path} decides whether a change is acceptable (tests, test "
                                "configuration, CI); the loop may not edit it")
-        if not scope_allows(auth, edit.path):
-            return "refused", (f"{edit.path} is outside the grant's scope {auth.scope!r} "
-                               "(a documentation grant covers prose only)")
-    return None
+        if not scope_allows(auth, edit.path) and out_of_scope is None:
+            out_of_scope = ("scope", f"{edit.path} is outside the grant's scope {auth.scope!r} "
+                                     "(a documentation grant covers prose only)")
+    # "scope" means that was the ONLY thing wrong: every other check passed for every edit.
+    return out_of_scope

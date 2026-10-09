@@ -23,7 +23,7 @@ cycles until the Drafter has nothing left to propose (or a cycle limit is
 hit). Only then does Warden hand the code, once, to the Finisher, together with the facts it measured (the suite result and what Ghost still reports), so the Finisher counts and detects nothing itself. The Finisher beautifies the code and writes the final README. The Finisher's change goes through
 the same gate.
 
-Version `0.6.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
+Version `0.7.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
 
 ## WHY IT EXISTS
 
@@ -99,7 +99,7 @@ ACCEPT / FINISH_REJECTED
 | `warden.isolation` | runs SWIZZLE, Ghost and ASSAY grading in an empty directory, with absolute roots |
 | `warden.runstate` | the per-target lock and the keep-test journal, both kept outside the target |
 | `warden.textio` | byte-faithful reads and writes: line endings kept, non-UTF-8 files refused |
-| `warden.cli` | `tagteam` and `audit` |
+| `warden.cli` | `tagteam` and `audit`; the exit-code table and the seat handshake |
 
 ## KEY INTERNAL CONCEPTS
 
@@ -125,8 +125,10 @@ CLI over a git work tree. Default is read-only. Writes require
 runs the whole loop and the hand-off (`--max-cycles`, default 10). Without
 `--drafter` it can only observe (`INCONCLUSIVE`). Without `--finisher` it stops
 when the loop converges.
-Without `--authorize` it proposes and writes nothing (`REFUSED`). If SWIZZLE's
-own proofs do not hold, nothing is written and the command exits 2. Without
+Without `--authorize` it proposes and writes nothing (`REFUSED`). `--reason` must
+not be empty. If SWIZZLE's own proofs do not hold, nothing is written and the
+command exits 2. The target path must be an existing folder, or the command exits 2
+at once. Without
 `--swizzle-root` the notes say `SWIZZLE proofs NOT RUN` and the adversary is
 uncalibrated.
 
@@ -138,10 +140,54 @@ proposals stay in the cycle records so a person can see what was tried. If the
 tree is too big to snapshot, the notes and the last decision text say so
 loudly and nothing is restored.
 
-Exit codes for `tagteam`: 0 for `ACCEPT`, `INCONCLUSIVE` and `REFUSED`; 3 for
-`ACCEPT_UNVERIFIED`; 2 when SWIZZLE's proofs fail or a seat cannot be loaded;
-4 for `ERROR`; 1 for every other decision. The command always prints valid
-JSON on stdout. Anything a seat prints goes to stderr.
+Exit codes for `tagteam` (the same table is in `warden tagteam --help`). Only 0 means
+the change was accepted, so a CI job can trust the exit code alone:
+
+| code | decision | what it means |
+|---|---|---|
+| 0 | `ACCEPT` | Measured, judged, and standing. The only success. |
+| 1 | `REJECT`, `JUDGE_REJECTED`, `NOT_CONVERGED`, `FINISH_REJECTED` | The change was rejected, did not settle, or the finishing step was refused. Anything else that is a rejection also exits 1. |
+| 2 | (usage error, seat not loaded, or SWIZZLE unsound) | The command was used wrongly (for example, the target folder does not exist), a seat could not be loaded or asked for a different contract, or SWIZZLE's own proofs do not hold. Nothing was written. |
+| 3 | `ACCEPT_UNVERIFIED` | The changes stand, but a check did not run or the Judge could not decide. Not approved. |
+| 4 | `ERROR` | A seat failed or gave the wrong kind of answer. Nothing was approved. |
+| 5 | `REFUSED` | No human authorization (or an empty reason, or a name Warden will not accept). A proposal may have been shown. Nothing was written. |
+| 6 | `INCONCLUSIVE` | A needed measurement could not be made: Ghost is down or timed out, the suite was red from the start, or the ASSAY key could not be used. Nothing was written. |
+
+A decision the code does not know exits 1, never 0. The JSON always has `decision`,
+`notes`, `unmeasured`, and `reason`. `reason` is one plain sentence saying why a run
+that was not a plain `ACCEPT` ended as it did. `unmeasured` is true: it names `ghost`
+when Ghost was down, timed out, scanned nothing or gave unreadable output, `suite`
+when the suite was never run, `swizzle` when its proofs failed or could not run, and
+`assay` when the answer key was unusable. `warden audit` exits 2 when it cannot read
+the findings or will not write; it never prints a clean-looking report for a Ghost
+that looked at nothing.
+
+**Reading the instruments.** Warden believes an instrument only when it is exact.
+`swizzle prove` must exit 0 and print a whole line `N of M proofs hold` with N equal
+to M and M at least 1 (`0 of 0` and `1 of 12` are not sound). SWIZZLE's governor
+report counts only if it exited 0 or 1 and every item has text for `scenario`,
+`severity` and `status`, with the status exactly `held` or `violated`; otherwise the
+whole report is "not measured" and the note says why, with the end of SWIZZLE's own
+error text. The ASSAY card must hold a list of records with at least one failure-mode
+specimen and only outcomes Warden knows. Ghost gets a time limit (`--ghost-timeout`,
+default 600 seconds), must return a list of records whose ids are text, and counts as
+not measured if it says it scanned nothing.
+
+**The handshake with the other repositories.** Judge, Drafter and Burnish build
+against Warden's shapes (`Evidence`, `Verdict`, `Facts`, `Transformation`). Warden
+exposes `warden.CONTRACT` (now `"1"`) and raises it only when one of those shapes
+changes in a way that breaks a seat written for the old shape. A seat can declare
+`requires_contract = "1"` (a class or instance attribute). When it names any other
+version, `warden tagteam` refuses to run, prints both versions, and exits 2. A seat
+that declares nothing still runs, with a warning on stderr and a note in the JSON.
+A Judge verdict with no judge name or with extra fields is reported in the notes
+and does not crash the run.
+
+A proposal that changes nothing is dropped as `NOTHING_TO_PROPOSE`, not counted as
+applied. A proposal that is outside the grant's scope and cites no defect is declined
+(nothing is written) and the loop goes on, as long as scope is the only thing wrong
+with it; asking for the same thing twice ends the run as `NOT_CONVERGED`. A proposal
+that also touches a test file, CI, or a path outside the target is still `REJECT`.
 
 `ERROR` means a seat (Drafter, Finisher, Judge) raised an exception or gave
 the wrong kind of answer. The notes name the seat and the kind of exception,
@@ -180,8 +226,13 @@ its markers is Warden's; every other section survives reruns untouched.
 - Restores are byte for byte. CRLF files stay CRLF, and a file that is not valid UTF-8 is never edited. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
 - `warden audit --authorize` will not overwrite a hand-written audit file that has no markers and will not write through a link or outside the target. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
 - ASSAY's answer key arrives, or the run says why it did not. **VERIFIED** by `tests/test_assay_link.py`, including a live read when `ASSAY_ROOT` is set (CI sets it).
+- Exit codes are honest: only `ACCEPT` exits 0, and each row of the table above has a test; an unknown decision never exits 0; `warden audit` exits 2 when it cannot read findings or will not write. **VERIFIED** by `tests/test_honest_exit_codes.py`.
+- `unmeasured` names the instrument that was down (Ghost, suite, SWIZZLE, ASSAY) and every non-`ACCEPT` result has a one-sentence `reason`. **VERIFIED** by `tests/test_honest_exit_codes.py`.
+- SWIZZLE, Ghost and ASSAY output is read strictly, a hung Ghost times out as unavailable, and garbled Ghost output after an edit puts the tree back. **VERIFIED** by `tests/test_honest_exit_codes.py`.
+- The seat handshake (`requires_contract`), a missing or non-folder target, an empty reason, a no-op proposal and an out-of-scope proposal are handled as described above. **VERIFIED** by `tests/test_honest_exit_codes.py`.
+- The whole loop with the real SWIZZLE, ASSAY, Ghost, Drafter and Judge, on a small scratch project, ended `ACCEPT` with exit 0 on 2026-10-09 (a check by hand, not a recorded test).
 
-185 tests exist in this tree. 184 passed and 1 skipped on CPython 3.13 without `ASSAY_ROOT`; the skipped one is the live ASSAY read, which CI runs on 3.11 and 3.12. The full run takes about 6 minutes.
+275 tests exist in this tree. All pass on CPython 3.13 except the one live ASSAY read, which is skipped without `ASSAY_ROOT` and which CI runs on 3.11 and 3.12. The full run takes about 6 minutes.
 
 ## WHAT IS BEAUTIFUL
 
@@ -231,6 +282,10 @@ authorized change, oracle ACCEPT, on a scratch demo. Recorded in
   `doc_test_count_drift` only reports a count the suite has grown past.
 - With no `--swizzle-root`, a change can still be ACCEPTed. The notes say the
   adversary is uncalibrated; the decision itself does not change.
+- Ghost reports how many files it scanned only on its error stream (`scanning N file(s)`), not in its JSON. Warden reads that line; if Ghost stops printing it, Warden cannot tell a clean tree from an empty one, except when Ghost itself exits with an error.
+- A run whose only proposals were all declined as out of scope ends as `ACCEPT` or `ACCEPT_UNVERIFIED` with nothing changed; the cycle records say `DECLINED`, and the Judge sees them.
+- The handshake only checks seats that declare `requires_contract`. Until Judge, Drafter and Burnish declare it, Warden warns and runs.
+- SWIZZLE attacks that did not run are noted but do not by themselves turn an `ACCEPT` into `ACCEPT_UNVERIFIED`; the Judge receives them as not measured.
 
 ## ARCHITECTURAL DEBT
 
