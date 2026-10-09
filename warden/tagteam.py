@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Dict, Optional, Sequence
 
 from .authorization import Authorization, Unauthorized
+from .deletion import DeletionGate, is_deletion
 from .ghost import defects_from_ghost, scan as ghost_scan
 from .models import Defect, Transformation, TransformationStatus
 from .roles import Facts, Finisher, Drafter
@@ -48,7 +49,7 @@ class Cycle:
     observed: int
     proposal: Optional[Transformation]
     applied: bool
-    outcome: str  # APPLIED / PUT_BACK / NOTHING_TO_PROPOSE / REFUSED / SUITE_RED
+    outcome: str  # APPLIED / PUT_BACK / NOTHING_TO_PROPOSE / REFUSED / SUITE_RED / HELD
     suite_before: Optional[SuiteRun] = None
     suite_after: Optional[SuiteRun] = None
 
@@ -143,6 +144,7 @@ class TagTeam:
         cycles: list[Cycle] = []
         converged = False
         seen: set[str] = set()
+        gate = DeletionGate()
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
             proposal = self.drafter.propose(target, observed, baseline)
@@ -151,13 +153,26 @@ class TagTeam:
                 converged = True
                 break
             key = _edits_key(proposal)
+            removes = is_deletion(target, proposal)
+            if removes:
+                held, observed = self._validate_deletion(
+                    target, proposal, key, gate, observed, python, notes, number)
+                if held is not None:
+                    cycles.append(held)
+                    if held.outcome == "REFUSED":
+                        return stop("REJECT", f"Cycle {number}: the removal failed validation and was "
+                                    "not applied; the loop stopped.", cycles, current=observed)
+                    continue
             if key in seen:
                 cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
                 return stop("NOT_CONVERGED", f"Cycle {number}: the Drafter repeated an earlier "
                             "proposal, so the loop is going in circles. Stopped.", cycles)
             seen.add(key)
-            cycle = self._apply(target, proposal, authorization, python, notes, number, len(observed))
+            cycle = self._apply(target, proposal, authorization, python, notes, number,
+                                len(observed), validated=removes)
             cycles.append(cycle)
+            if removes:
+                gate.reset()
             if cycle.outcome == "SUITE_RED":
                 return stop("INCONCLUSIVE", f"Cycle {number}: the suite is not green; nothing was written.", cycles)
             if cycle.outcome != "APPLIED":
@@ -200,8 +215,52 @@ class TagTeam:
 
     # -- steps ------------------------------------------------------------
 
+    def _validate_deletion(self, target: Path, proposal: Transformation, key: str,
+                           gate: DeletionGate, observed: tuple[Defect, ...], python: str,
+                           notes: list[str], number: int):
+        """One loop validation of a pending removal.
+
+        Returns (held_cycle, observed). held_cycle is None only when this was
+        the validation that satisfies the gate, so the caller may apply.
+        """
+        def hold(why: str):
+            # A failed validation is not "wait one more cycle": the count is
+            # lost and the loop stops rather than spin on a removal it cannot clear.
+            gate.reset()
+            notes.append(f"Cycle {number}: deletion not validated. {why}")
+            return Cycle(number, len(observed), proposal, False, "REFUSED"), observed
+
+        if self.ghost_tools_root is None:
+            return hold("Ghost is not configured, so the removal cannot be validated.")
+        if not self.run_tests:
+            return hold("The suite is not being run, so the removal cannot be validated.")
+        if self._calibrate(python, notes) is False:
+            return hold("SWIZZLE's proofs do not hold.")
+        suite = self._suite(target, python, notes, f"cycle {number} deletion validation")
+        if suite is None or not suite.green:
+            return hold("The suite is not green.")
+        reobserved = self._reinspect(target, observed, python, notes)
+        wanted = {d.ghost_id for d in proposal.known_defects if d.ghost_id}
+        if not wanted:
+            return hold("The removal cites no Ghost finding, so there is nothing to validate it against.")
+        if not wanted <= {d.ghost_id for d in reobserved if d.ghost_id}:
+            observed = reobserved
+            return hold("Ghost no longer reports the finding behind this removal.")
+        observed = reobserved
+        count = gate.record(key, (suite.passed, suite.failed, suite.errors))
+        if gate.satisfied(key):
+            notes.append(f"Cycle {number}: deletion validation {count} of {gate.required} passed. "
+                         "The removal may now be applied.")
+            return None, observed
+        notes.append(f"Cycle {number}: deletion validation {count} of {gate.required} passed. "
+                     "Held for the next cycle.")
+        return Cycle(number, len(observed), proposal, False, "HELD", suite, None), observed
+
     def _apply(self, target: Path, proposal: Transformation, auth: Authorization, python: str,
-               notes: list[str], number: int, seen: int) -> "_Applied":
+               notes: list[str], number: int, seen: int, validated: bool = False) -> "_Applied":
+        if not validated and is_deletion(target, proposal):
+            notes.append("A removal reached the applier without two loop validations. Refused.")
+            return _Applied(number, seen, proposal, False, "REFUSED", None, None, {})
         before = self._suite(target, python, notes, f"cycle {number} before")
         if before is not None and not before.green:
             proposal.status = TransformationStatus.PROPOSED
