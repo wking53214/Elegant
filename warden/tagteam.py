@@ -34,7 +34,7 @@ from typing import Dict, Mapping, Optional, Sequence
 from . import runstate, textio
 from .authorization import Authorization, Unauthorized, is_stack_actor
 from .deletion import commented_variant, is_deletion, keep_variant, stamp_now
-from .ghost import defects_from_ghost, scan as ghost_scan
+from .ghost import GhostCrashed, GhostRefused, _clean as _plain, defects_from_ghost, scan as ghost_scan
 from .guard import FORBIDDEN_DIRS, SeatBrokeCharter, Snapshot, is_protected, violation, watch
 from .models import Defect, FileEdit, Transformation, TransformationStatus, safe_id
 from .roles import Evidence, Facts, Finisher, Drafter, Judge, Verdict
@@ -53,6 +53,10 @@ DECISIONS = ("ACCEPT", "ACCEPT_UNVERIFIED", "REJECT", "JUDGE_REJECTED", "NOT_CON
 PUT_BACK_NOTE = "The tree was put back as it was found because the run did not finish accepted."
 SOURCE_CHANGED_NOTE = "the test suite changed source files, so its result cannot be trusted"
 _ENDS_ACCEPTED = {"ACCEPT", "ACCEPT_UNVERIFIED"}
+
+
+#: At most this many Drafter "skipped" lines are kept in the output.
+MAX_SKIPPED_LINES = 20
 
 
 class GhostUnavailable(RuntimeError):
@@ -104,6 +108,11 @@ class TagTeamResult:
     unmeasured: tuple[str, ...] = ()
     #: What the Judge said, when one was seated.
     verdict: Optional[Verdict] = None
+    #: What new Ghost said about its last scan: status, file counts, real gaps, declined checks.
+    #: None when Ghost was not scanned in this run or is the old kind that says none of this.
+    ghost_scan: Optional[dict] = None
+    #: Why the Drafter left findings alone, as short sanitized lines (capped). Information, not a gap.
+    drafter_skipped: tuple[str, ...] = ()
     #: True when edits had been made and the whole tree was restored because the run did not end accepted.
     put_back: bool = False
     #: One plain sentence saying why the run ended as it did (the same sentence as the last note
@@ -176,6 +185,11 @@ class TagTeam:
         self._down: set[str] = set()
         self._suite_ran = False
         self._sound: Optional[bool] = None
+        #: Real gaps in the latest Ghost scan (see ghost._gaps), and the summary shown in the output.
+        self._ghost_gaps: list[str] = []
+        self._ghost_info: Optional[dict] = None
+        self._skipped: list[str] = []
+        self._skipped_more = 0
         lock = runstate.TargetLock(target)
         if not lock.acquire():
             return TagTeamResult(
@@ -221,7 +235,7 @@ class TagTeam:
             target=str(target), baseline="", observed=(), reobserved=(),
             cycles=tuple(self._trail), converged=False, decision=decision,
             notes=tuple(self._notes + [said]), unmeasured=self._unmeasured(self._sound, never_ran=True),
-            reason=said)
+            reason=said, ghost_scan=self._ghost_info, drafter_skipped=self._skipped_lines())
 
     def _settle(self, target: Path, result: TagTeamResult) -> TagTeamResult:
         """A run that does not end accepted leaves the tree as it was found."""
@@ -337,6 +351,9 @@ class TagTeam:
             out.append("assay")
         if self.ghost_tools_root is None or "ghost" in self._down:
             out.append("ghost")
+        elif self._ghost_gaps:
+            # Ghost ran but could not look at everything it should have. Not "ghost" (down), but not whole either.
+            out.append("ghost_partial")
         if self.swizzle_root is None or sound is False or "swizzle" in self._down:
             out.append("swizzle")
         if not self.run_tests or "suite" in self._down or (never_ran and not self._suite_ran):
@@ -378,7 +395,8 @@ class TagTeam:
                 reobserved=reobserved, cycles=tuple(cycles),
                 converged=converged, decision=decision, notes=tuple(notes + [why]),
                 finish=finish, finished=finished, swizzle_sound=sound, unmeasured=missing,
-                verdict=verdict, reason=why.strip())
+                verdict=verdict, reason=why.strip(), ghost_scan=self._ghost_info,
+                drafter_skipped=self._skipped_lines())
 
         if self.drafter is None:
             return stop("INCONCLUSIVE", "No drafter. Tag team observed only; nothing can be proposed.")
@@ -386,6 +404,7 @@ class TagTeam:
             # Show what would be proposed, change nothing.
             with self._seated("The Drafter"), watch(target, "The Drafter"):
                 proposal = _expect(self.drafter.propose(target, observed, _fingerprint(target)), "The Drafter")
+            self._collect_skipped()
             cycle = Cycle(1, len(observed), proposal, False, "REFUSED")
             return stop("REFUSED", "Human authorization missing. Proposal stands. No write.",
                         cycles=[cycle])
@@ -404,6 +423,7 @@ class TagTeam:
             offered = tuple(d for d in observed if d.identity not in declined)
             with self._seated("The Drafter"), watch(target, "The Drafter"):
                 proposal = _expect(self.drafter.propose(target, offered, baseline), "The Drafter")
+            self._collect_skipped()
             if proposal is None or not proposal.edits:
                 cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
                 converged = True
@@ -625,6 +645,7 @@ class TagTeam:
                  notes: list[str]) -> tuple[Defect, ...]:
         if findings is not None:
             observed = _defects(findings)
+            self._absorb_ghost(findings)
             notes.append(f"Ghost Tools findings loaded ({len(observed)}), not scanned in this process.")
             return observed
         if self.ghost_tools_root is None:
@@ -640,6 +661,7 @@ class TagTeam:
             with watch(target, "Ghost Tools"):
                 found = ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python,
                                    ghost_timeout=self.ghost_timeout)
+            self._absorb_ghost(found)
             blind = getattr(found, "blind", None)
             if blind:
                 self._down.add("ghost")
@@ -647,10 +669,60 @@ class TagTeam:
             return found
         except SeatBrokeCharter:
             raise
+        except (GhostCrashed, GhostRefused) as err:
+            # Ghost itself died or refused to start: an instrument fault, so INCONCLUSIVE (never a finding).
+            raise GhostUnavailable(f"{err}. This is a fault in Ghost, not a finding. Observation is UNKNOWN; "
+                                   "nothing further was attempted.") from err
         except Exception as err:  # noqa: BLE001 - any failure to see is UNKNOWN, not "no findings"
             raise GhostUnavailable(
                 f"Ghost could not be run or read ({type(err).__name__}: {str(err)[:120]}). "
                 "Observation is UNKNOWN; nothing further was attempted.") from err
+
+    def _absorb_ghost(self, found) -> None:
+        """Take what new Ghost said about its scan (old Ghost says nothing; that changes nothing).
+
+        Rule: only gaps count (checks that should have run and did not, unparsable files, a detector
+        that raised, git missing when needed). Checks the caller declined or that are opt-in and were
+        not requested are listed as `declined` and never touch the decision.
+        """
+        counts = getattr(found, "scan_counts", None)
+        gaps = tuple(getattr(found, "gaps", ()) or ())
+        self._ghost_gaps = [_plain(g) for g in gaps]
+        if counts is None and getattr(found, "status", None) is None and not gaps:
+            self._ghost_info = None
+            return
+        self._ghost_info = {
+            "status": getattr(found, "status", None), **(counts or {}),
+            "gaps": self._ghost_gaps[:10], "gaps_not_shown": max(0, len(self._ghost_gaps) - 10),
+            "declined": [_plain(d, 40) for d in (getattr(found, "declined", ()) or ())][:20],
+        }
+        if self._ghost_gaps:
+            self._notes.append("Ghost scan has gaps, so Ghost is counted as partly measured: "
+                               + "; ".join(self._ghost_gaps[:5]) + ("; and more" if len(self._ghost_gaps) > 5 else ""))
+
+    def _collect_skipped(self) -> None:
+        """After a Drafter call: gather its own account of what it left alone, if it keeps one."""
+        describe = getattr(self.drafter, "describe_skipped", None)
+        if not callable(describe):
+            return
+        try:
+            lines = tuple(describe())
+        except Exception:  # noqa: BLE001 - optional information must never fail a run
+            return
+        for line in lines:
+            if not isinstance(line, str):
+                continue
+            line = _plain(line, 200)
+            if not line or line in self._skipped:
+                continue
+            if len(self._skipped) < MAX_SKIPPED_LINES:
+                self._skipped.append(line)
+            else:
+                self._skipped_more += 1
+
+    def _skipped_lines(self) -> tuple[str, ...]:
+        more = (f"... and {self._skipped_more} more not shown",) if self._skipped_more else ()
+        return tuple(self._skipped) + more
 
     def _suite(self, target: Path, python: str, notes: list[str], when: str) -> Optional[SuiteRun]:
         if not self.run_tests:

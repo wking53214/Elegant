@@ -158,9 +158,38 @@ A decision the code does not know exits 1, never 0. The JSON always has `decisio
 that was not a plain `ACCEPT` ended as it did. `unmeasured` is true: it names `ghost`
 when Ghost was down, timed out, scanned nothing or gave unreadable output, `suite`
 when the suite was never run, `swizzle` when its proofs failed or could not run, and
-`assay` when the answer key was unusable. `warden audit` exits 2 when it cannot read
+`assay` when the answer key was unusable, and `ghost_partial` when Ghost ran but
+could not look at everything it should have (see below). `warden audit` exits 2 when it cannot read
 the findings or will not write; it never prints a clean-looking report for a Ghost
 that looked at nothing.
+
+**Old and new Ghost.** Warden reads both. Old Ghost prints a bare list of findings. New
+Ghost prints an object with `status`, `scan` counts and an `unmeasured` list, and exits
+0 clean, 1 findings, 2 did not start, 3 crashed. Exit 3 ends the run as `INCONCLUSIVE`
+with a reason that says Ghost crashed (a fault in Ghost, never a finding and never a
+clean scan); exit 2 is reported as Ghost not starting. The output JSON gains
+`ghost_scan` (status, file counts, `gaps`, `declined`; null for old Ghost) and
+`drafter_skipped` (the Drafter's own reasons for leaving findings alone, from
+`describe_skipped()` when it has one; at most 20 lines of 200 characters, cleaned of
+control characters; information, never a gap).
+
+**What counts as a gap.** Only an `unmeasured` row that Ghost does not mark as asked for
+(`by_request` true; `requested` is read as the same thing). Checks the caller declined
+(`--no-tests` and the like, which Warden passes on purpose) and opt-in checks nobody
+requested (`mutate`, `kernel`) are listed under `declined` and change nothing, so a
+clean default run can still be a plain `ACCEPT`. Everything else is a gap: unparsable
+files, a detector that raised, git missing when Ghost needs it, a row that does not say
+who asked for it, or `status: incomplete` with no reason. A gap puts `ghost_partial` in
+`unmeasured`, so the Judge sees it and the run ends `ACCEPT_UNVERIFIED` at best, never
+a plain `ACCEPT`. (A target that is not a git repository is such a gap: Ghost's
+`branches` check cannot run there.)
+
+**Ids.** Warden compares Ghost ids only within one run, so the one-time id change in
+new Ghost does not disturb the loop unless `--from-ghost` findings from old Ghost are
+mixed with a live scan from new Ghost (do not). `warden audit` keeps its human ids
+across the change: a row whose Ghost id is gone adopts the new id of a finding with the
+same detector, summary and line whose path is the old path with folders in front, only
+when that match is unique both ways. Anything else becomes a new row, as before.
 
 **Reading the instruments.** Warden believes an instrument only when it is exact.
 `swizzle prove` must exit 0 and print a whole line `N of M proofs hold` with N equal

@@ -19,7 +19,7 @@ from pathlib import Path
 from . import CONTRACT, __version__
 from .authorization import Unauthorized, grant
 from . import audit as audit_file, textio
-from .ghost import load_findings, scan as ghost_scan
+from .ghost import load_report, scan as ghost_scan
 from .tagteam import TagTeam
 
 
@@ -125,7 +125,7 @@ def _tagteam(args) -> int:
     if not path.is_dir():
         what = "does not exist" if not path.exists() else "is not a directory"
         return _stop("USAGE_ERROR", f"The target {str(path)!r} {what}. Nothing was run.")
-    findings = list(load_findings(args.from_ghost)) if args.from_ghost else None
+    findings = load_report(args.from_ghost) if args.from_ghost else None
     auth = None
     if args.authorize:
         if not args.reason.strip():
@@ -170,6 +170,8 @@ def _run_team(args, auth, findings, drafter, finisher, judge, warnings=()) -> in
         "reobserved": [d.identity for d in result.reobserved],
         "swizzle_sound": result.swizzle_sound,
         "unmeasured": list(result.unmeasured),
+        "ghost_scan": result.ghost_scan,
+        "drafter_skipped": list(result.drafter_skipped),
         "verdict": None if result.verdict is None else {
             "decision": result.verdict.decision, "reasons": list(result.verdict.reasons),
             "judge": result.verdict.judge},
@@ -212,7 +214,7 @@ def _audit(args) -> int:
         return 2
     try:
         if args.from_ghost:
-            findings = load_findings(args.from_ghost)
+            findings = load_report(args.from_ghost)
         elif args.ghost_root:
             findings = ghost_scan(root, ghost_tools_root=args.ghost_root)
         else:
@@ -224,6 +226,9 @@ def _audit(args) -> int:
     if findings is not None and getattr(findings, "blind", None):
         print(f"warden: {findings.blind}. Nothing was printed or written.", file=sys.stderr)
         return 2
+    if getattr(findings, "gaps", None):
+        print("warden: warning: Ghost's scan had gaps (" + "; ".join(findings.gaps[:3]) + "), so a row marked "
+              "'not seen in latest scan' may only be one Ghost could not look at.", file=sys.stderr)
     if findings is None:
         print("warden: audit needs --ghost-root or --from-ghost; an audit of nothing "
               "would read as a clean repository", file=sys.stderr)
