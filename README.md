@@ -96,6 +96,9 @@ ACCEPT / FINISH_REJECTED
 | `warden.ghost` | JSON consumer plus an optional read-only scan |
 | `warden.registry` | campaign record; the current one is `docs/REGISTRY.json` |
 | `warden.horsemen` | typed handoffs, scoped grants, receipts. `AssayAdapter` reads ASSAY's `assay_production/registry.json` and raises `AssayUnavailable` rather than return no specimens |
+| `warden.isolation` | runs SWIZZLE, Ghost and ASSAY grading in an empty directory, with absolute roots |
+| `warden.runstate` | the per-target lock and the keep-test journal, both kept outside the target |
+| `warden.textio` | byte-faithful reads and writes: line endings kept, non-UTF-8 files refused |
 | `warden.cli` | `tagteam` and `audit` |
 
 ## KEY INTERNAL CONCEPTS
@@ -127,6 +130,23 @@ own proofs do not hold, nothing is written and the command exits 2. Without
 `--swizzle-root` the notes say `SWIZZLE proofs NOT RUN` and the adversary is
 uncalibrated.
 
+A run that does not end `ACCEPT` or `ACCEPT_UNVERIFIED` leaves the tree as it
+found it. Warden takes a snapshot at the start of every run, and if the run
+ends any other way (rejected, not converged, suite red, a seat failed) after
+changes were made, the whole tree is restored and the notes say so. The
+proposals stay in the cycle records so a person can see what was tried. If the
+tree is too big to snapshot, the notes and the last decision text say so
+loudly and nothing is restored.
+
+Exit codes for `tagteam`: 0 for `ACCEPT`, `INCONCLUSIVE` and `REFUSED`; 3 for
+`ACCEPT_UNVERIFIED`; 2 when SWIZZLE's proofs fail or a seat cannot be loaded;
+4 for `ERROR`; 1 for every other decision. The command always prints valid
+JSON on stdout. Anything a seat prints goes to stderr.
+
+`ERROR` means a seat (Drafter, Finisher, Judge) raised an exception or gave
+the wrong kind of answer. The notes name the seat and the kind of exception,
+never a traceback, and the tree is put back.
+
 Rule 7 is enforced on every authorized write: the suite must be green before
 the change, or nothing is written; after it, no new failures and at least as
 many passes, or the change is put back and the decision is `REJECT`. Both
@@ -144,15 +164,24 @@ its markers is Warden's; every other section survives reruns untouched.
 - Ghost IDs are preserved. **VERIFIED** by `tests/test_ghost_identity.py`.
 - Tag team without a grant does not write; without a drafter it only observes. **VERIFIED** by `tests/test_tagteam.py`.
 - The loop cycles until the drafter runs dry, stops at the cycle limit, and notices a drafter going in circles. **VERIFIED** by `tests/test_tagteam.py`.
-- The finisher runs once, only after convergence, and a finishing change that breaks the suite is put back while the loop's result stands. **VERIFIED** by `tests/test_tagteam.py`.
+- The finisher runs once, only after convergence. A finishing change that breaks the suite is put back, and because the run is then not accepted, the loop's edits are put back too. **VERIFIED** by `tests/test_tagteam.py` and `tests/test_closing_false_accepts.py`.
 - With `--assay-root` and `--swizzle-root`, Ghost is graded against ASSAY's answer key before anything is written; an unproven key or an ungradable specimen stops the run, and the score goes to the Judge with the floor (default 3 of 5, where Ghost stands today). **VERIFIED** by `tests/test_assay_in_loop.py`, and live on CNS (Ghost caught 3 of 5).
 - SWIZZLE's proofs failing stops the write; not configuring SWIZZLE is said out loud. **VERIFIED** by `tests/test_tagteam.py`.
 - A change that breaks the target's suite is put back; a red or empty suite means nothing is written. **VERIFIED** by `tests/test_rule7_suite_gate.py`.
 - Audit IDs survive reruns, are never reused, and a Fixed defect that returns is reopened under its own ID. **VERIFIED** by `tests/test_audit.py`.
 - No Warden module imports Burnish, Drafter or any other repository in the stack, and none of the beautification modules remain. **VERIFIED** by `tests/test_independence.py`.
+- A run that does not end accepted leaves the tree as found (rejected, not converged, suite red in a later cycle, a seat that raises or returns the wrong type). The CLI always prints valid JSON. **VERIFIED** by `tests/test_closing_false_accepts.py`.
+- The target cannot pose as an instrument: SWIZZLE, Ghost and ASSAY grading run in an empty directory, with absolute roots and without the current directory on the import path. Stack names (judge, assay, drafter, burnish, ghost, swizzle, ghost_tools, the warden) cannot authorize changes to Warden's own tree. **VERIFIED** by `tests/test_closing_false_accepts.py`.
+- No edit, proposal or finish may touch `.git`, `.hg`, `.svn`, virtual environments, `node_modules`, `__pycache__`, `site-packages` or tool caches. A seat that changes `.git/hooks`, `.git/config` or `.git/info` is caught and the files are put back. **VERIFIED** by `tests/test_closing_false_accepts.py`.
+- A Ghost id with odd characters cannot put code in a file: ids are cut down to letters, digits and `_ . : -`, on one line, 64 characters at most. **VERIFIED** by `tests/test_closing_false_accepts.py`.
+- A removal is declined when the baseline suite has any skipped or xfailed test, and when the code is vendored or generated. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
+- A suite that changes source files stops the run as `INCONCLUSIVE`. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
+- The keep test saves the original files outside the target before it plants a trap, and the next run restores them if a kill left a trap behind. Two runs on one target cannot overlap. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
+- Restores are byte for byte. CRLF files stay CRLF, and a file that is not valid UTF-8 is never edited. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
+- `warden audit --authorize` will not overwrite a hand-written audit file that has no markers and will not write through a link or outside the target. **VERIFIED** by `tests/test_closing_false_accepts_2.py`.
 - ASSAY's answer key arrives, or the run says why it did not. **VERIFIED** by `tests/test_assay_link.py`, including a live read when `ASSAY_ROOT` is set (CI sets it).
 
-38 tests exist in this tree. 37 passed and 1 skipped on CPython 3.13 without `ASSAY_ROOT`; the skipped one is the live ASSAY read, which CI runs on 3.11 and 3.12.
+185 tests exist in this tree. 184 passed and 1 skipped on CPython 3.13 without `ASSAY_ROOT`; the skipped one is the live ASSAY read, which CI runs on 3.11 and 3.12. The full run takes about 6 minutes.
 
 ## WHAT IS BEAUTIFUL
 
@@ -191,6 +220,13 @@ authorized change, oracle ACCEPT, on a scratch demo. Recorded in
 
 ## KNOWN DEFECTS
 
+- The target's own test suite still runs inside the target, with the target's code. A hostile suite can do anything the user can do. Warden now notices a suite that rewrites source files, but not one that does something else.
+- Only the keep test is protected from a kill (SIGKILL) by the journal. If Warden is killed at another moment, edits it had already applied stay on disk, and the next run does not know about them.
+- The lock is advisory and works on one machine. It stops two Warden runs, not a person editing at the same time.
+- A tree too large to snapshot (over 200 MB) cannot be put back. The notes say so, and a failed run leaves its edits.
+- The forbidden and vendored directory lists go by folder name. A real source folder named `env`, `gen`, `build` or `vendor` will not be edited.
+- A suite with skipped or xfailed tests blocks every removal, even for code those tests do not touch. That is on purpose: Warden cannot tell which code they would have covered.
+- Files that are not valid UTF-8 are reported at most by Ghost and are never edited.
 - Ghost Tools does not flag a documented test count larger than the suite;
   `doc_test_count_drift` only reports a count the suite has grown past.
 - With no `--swizzle-root`, a change can still be ACCEPTed. The notes say the
