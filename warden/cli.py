@@ -40,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     p_t.add_argument("--max-cycles", type=int, default=10)
     p_t.add_argument("--swizzle-root", type=Path, default=None,
                      help="SWIZZLE checkout; its proofs must hold before anything is ACCEPTed")
+    p_t.add_argument("--assay-root", type=Path, default=None,
+                     help="ASSAY checkout; with --swizzle-root, Ghost is graded against its answer key first")
+    p_t.add_argument("--assay-floor", type=int, default=3,
+                     help="the fewest known failure modes Ghost must catch for the Judge to accept "
+                          "(default 3, where Ghost stands today; 0 records the score without enforcing it)")
     p_t.add_argument("--from-ghost", type=Path, default=None, help="findings JSON instead of a live scan")
     p_t.add_argument("--authorize", default=None, metavar="ACTOR")
     p_t.add_argument("--reason", default="")
@@ -81,6 +86,7 @@ def _tagteam(args) -> int:
         print(f"warden: cannot load seat: {e}", file=sys.stderr)
         return 2
     team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
+                   assay_root=args.assay_root, assay_floor=args.assay_floor,
                    drafter=drafter, finisher=finisher, judge=judge, max_cycles=args.max_cycles)
     result = team.run(args.path, authorization=auth, findings=findings)
     payload = {

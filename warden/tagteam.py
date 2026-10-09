@@ -37,7 +37,7 @@ from .guard import SeatBrokeCharter, Snapshot, is_protected, violation, watch
 from .models import Defect, FileEdit, Transformation, TransformationStatus
 from .roles import Evidence, Facts, Finisher, Drafter, Judge, Verdict
 from .suite import SuiteRun, preserved, run_suite
-from .swizzle import governor_attacks, swizzle_proofs_hold
+from .swizzle import assay_score, governor_attacks, swizzle_proofs_hold
 
 DEFAULT_MAX_CYCLES = 10
 
@@ -100,6 +100,8 @@ class TagTeam:
         *,
         ghost_tools_root: Optional[Path] = None,
         swizzle_root: Optional[Path] = None,
+        assay_root: Optional[Path] = None,
+        assay_floor: int = 0,
         drafter: Optional[Drafter] = None,
         finisher: Optional[Finisher] = None,
         judge: Optional[Judge] = None,
@@ -108,6 +110,10 @@ class TagTeam:
     ) -> None:
         self.ghost_tools_root = ghost_tools_root
         self.swizzle_root = swizzle_root
+        #: ASSAY checkout. With SWIZZLE, Ghost is graded against its answer key before anything is written.
+        self.assay_root = assay_root
+        #: The fewest known failure modes Ghost must catch for the Judge to accept.
+        self.assay_floor = assay_floor
         self.drafter = drafter
         self.finisher = finisher
         self.judge = judge
@@ -128,6 +134,8 @@ class TagTeam:
         _refuse_self_authorization(target, authorization)
         self._notes: list[str] = []
         self._trail: list[Cycle] = []
+        self._assay_state: Optional[bool] = None
+        self._assay: dict = {}
         try:
             return self._run(target, authorization, findings, python or sys.executable)
         except (SeatBrokeCharter, GhostUnavailable) as err:
@@ -166,7 +174,8 @@ class TagTeam:
             ghost_before=tuple(sorted(d.identity for d in first)) if ghost else None,
             ghost_after=tuple(sorted(d.identity for d in current)) if ghost else None,
             declined=tuple(sorted(declined)), swizzle_proofs=sound, attacks=attacks,
-            unmeasured=self._unmeasured(sound), notes=tuple(notes))
+            unmeasured=self._unmeasured(sound), notes=tuple(notes),
+            assay=({**self._assay, "floor": self.assay_floor} if self._assay_state else None))
         try:
             with watch(target, "The Judge"):
                 verdict = self.judge.decide(evidence)
@@ -190,6 +199,8 @@ class TagTeam:
 
     def _unmeasured(self, sound: Optional[bool]) -> tuple[str, ...]:
         out = []
+        if self._assay_state is not True:
+            out.append("assay")
         if self.ghost_tools_root is None:
             out.append("ghost")
         if self.swizzle_root is None or sound is False:
@@ -204,6 +215,7 @@ class TagTeam:
              findings: Optional[Sequence[dict]], python: str) -> TagTeamResult:
         notes = self._notes
         sound = self._calibrate(python, notes)
+        self._grade(python, notes)
         observed = self._observe(target, findings, python, notes)
         first = observed
         base0 = _fingerprint(target)
@@ -245,6 +257,8 @@ class TagTeam:
                         cycles=[cycle])
         if sound is False:
             return stop("INCONCLUSIVE", "SWIZZLE's own proofs do not hold; nothing was written.")
+        if self._assay_state is False:
+            return stop("INCONCLUSIVE", "ASSAY's answer key could not be used to grade Ghost; nothing was written.")
 
         cycles: list[Cycle] = self._trail
         converged = False
@@ -424,6 +438,19 @@ class TagTeam:
         sound, summary = swizzle_proofs_hold(swizzle_root=self.swizzle_root, python=python)
         notes.append(summary)
         return sound
+
+    def _grade(self, python: str, notes: list[str]) -> None:
+        """ASSAY's answer key: is Ghost's eye any good? Graded once, before anything is written."""
+        if self.assay_root is None:
+            notes.append("ASSAY grading NOT RUN: no assay_root. Ghost's accuracy is unchecked.")
+            return
+        if self.swizzle_root is None:
+            notes.append("ASSAY grading NOT RUN: it is done by SWIZZLE and no swizzle_root was given.")
+            return
+        self._assay_state, self._assay, summary = assay_score(
+            swizzle_root=self.swizzle_root, assay_root=self.assay_root,
+            ghost_root=self.ghost_tools_root, python=python)
+        notes.append(summary)
 
     def _observe(self, target: Path, findings: Optional[Sequence[dict]], python: str,
                  notes: list[str]) -> tuple[Defect, ...]:

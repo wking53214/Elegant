@@ -75,3 +75,52 @@ def governor_attacks(
     if not items or any(i.get("status") == "not_run" for i in items):
         return None
     return tuple({"scenario": i["scenario"], "severity": i["severity"], "status": i["status"]} for i in items)
+
+
+def assay_score(
+    *,
+    swizzle_root: Path,
+    assay_root: Path,
+    ghost_root: Optional[Path] = None,
+    python: str = sys.executable,
+) -> tuple[Optional[bool], dict, str]:
+    """Ghost graded against ASSAY's answer key, by SWIZZLE's `assay` command.
+
+    Returns (state, score, one-line summary). state is True when the key was
+    proven and every specimen was scored, False when the key is unproven or
+    something could not be scored (never read that as a pass), and None when
+    the grading could not run at all. Warden only relays; the grading is
+    SWIZZLE's and the answers are ASSAY's.
+    """
+    import json
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(swizzle_root) + os.pathsep + env.get("PYTHONPATH", "")
+    cmd = [python, "-m", "swizzle.cli", "assay", "--assay", str(assay_root), "--json"]
+    if ghost_root is not None:
+        cmd += ["--ghost-tools", str(ghost_root)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=600)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return None, {}, f"ASSAY grading could not run: {exc}"
+    if proc.returncode == 2:
+        why = (proc.stderr.strip().splitlines() or ["no reason given"])[-1]
+        return False, {}, f"ASSAY grading failed (key unproven or specimen unscorable): {why}"
+    if proc.returncode != 0:
+        return None, {}, f"ASSAY grading exited {proc.returncode}"
+    try:
+        card = json.loads(proc.stdout)
+        judgements = card["judgements"]
+    except (ValueError, KeyError, TypeError):
+        return None, {}, "ASSAY grading printed something unreadable"
+    modes = [j for j in judgements if j.get("specimen_class") == "FAILURE_MODE"]
+    score = {
+        "key_proven": True,
+        "failure_modes": len(modes),
+        "caught": sum(j.get("outcome") == "banished" for j in modes),
+        "escaped": sum(j.get("outcome") == "escaped" for j in modes),
+        "misnamed": sum(j.get("outcome") == "misnamed" for j in modes),
+        "proof": str(card.get("proof", "")),
+    }
+    return True, score, (f"ASSAY: Ghost caught {score['caught']} of {score['failure_modes']} "
+                         f"known failure modes ({score['proof']})")
