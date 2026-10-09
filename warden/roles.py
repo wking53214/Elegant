@@ -10,7 +10,14 @@ know what beautiful code looks like. Two other repositories answer those:
               the final README. Its output is also a proposal; Warden applies
               it under the same gate (grant, green suite, Ghost no worse).
 
-Neither seat may decide that it is right. Warden checks the suite and Ghost
+A third seat decides. The Judge is handed the evidence of the whole run and
+returns a verdict; it measures nothing and writes nothing, and Warden may not
+say ACCEPT without it:
+
+  Judge      at the end, once. Reads the evidence and says ACCEPT, REJECT or
+              INSUFFICIENT. REJECT puts the whole tree back as it was found.
+
+Neither maker seat may decide that it is right. Warden checks the suite and Ghost
 checks the result, so no one grades their own work.
 
 Warden never imports the repositories that fill these seats; they import
@@ -19,9 +26,9 @@ Warden's data shapes. The tests prove it.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import Mapping, Optional, Protocol, runtime_checkable
 
 from .models import Defect, Transformation
 from .suite import SuiteRun
@@ -58,3 +65,52 @@ class Finisher(Protocol):
     """Called once, after the loop has converged. Returns None if nothing to finish."""
 
     def finish(self, target: Path, baseline: str, facts: Facts) -> Optional[Transformation]: ...
+
+
+@dataclass(frozen=True)
+class Evidence:
+    """Everything a Judge may rely on, measured by someone other than the Judge.
+
+    Warden assembles it. Ghost, the suite and SWIZZLE produced the numbers.
+    None means "not measured", which is never the same as "fine".
+    """
+
+    target: str
+    #: The human grant's scope: "documentation" or "code".
+    scope: str
+    #: (cycle number, outcome) for every cycle that ran.
+    cycles: tuple[tuple[int, str], ...]
+    #: (path, kind) of every edit that was actually applied, finishing included.
+    changed: tuple[tuple[str, str], ...]
+    #: Of those, the paths that decide acceptability (tests, test config, CI).
+    judging_files_touched: tuple[str, ...]
+    suite_before: Optional[SuiteRun]
+    suite_after: Optional[SuiteRun]
+    #: Ghost finding identities at the start and at the end. None: Ghost never ran.
+    ghost_before: Optional[tuple[str, ...]]
+    ghost_after: Optional[tuple[str, ...]]
+    #: Removals that failed a test and were left in place.
+    declined: tuple[str, ...]
+    #: True: SWIZZLE's own proofs held. False: they did not. None: not run.
+    swizzle_proofs: Optional[bool]
+    #: SWIZZLE's attacks on the governor, as reported ({scenario, severity, status}). None: not run.
+    attacks: Optional[tuple[Mapping[str, str], ...]]
+    #: Checks that never ran, by name.
+    unmeasured: tuple[str, ...]
+    notes: tuple[str, ...] = field(default=())
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """The Judge's decision. ACCEPT, REJECT, or INSUFFICIENT (cannot decide on this evidence)."""
+
+    decision: str
+    reasons: tuple[str, ...]
+    judge: str = ""
+
+
+@runtime_checkable
+class Judge(Protocol):
+    """Called once, at the very end. It reads evidence; it does not measure or write."""
+
+    def decide(self, evidence: Evidence) -> Verdict: ...

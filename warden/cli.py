@@ -32,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     p_t.add_argument("--ghost-root", type=Path, default=None)
     p_t.add_argument("--drafter", default=None, metavar="MODULE:FACTORY",
                      help="in the loop: proposes fixes, e.g. drafter.seat:Drafter")
+    p_t.add_argument("--judge", default=None, metavar="MODULE:FACTORY",
+                     help="at the end, once: reads the evidence and decides ACCEPT or REJECT. "
+                          "Without one, a run cannot be ACCEPTed, only ACCEPT_UNVERIFIED")
     p_t.add_argument("--finisher", default=None, metavar="MODULE:FACTORY",
                      help="after the loop, once: beautifies and writes the final README")
     p_t.add_argument("--max-cycles", type=int, default=10)
@@ -73,11 +76,12 @@ def _tagteam(args) -> int:
     try:
         drafter = _load_seat(args.drafter)
         finisher = _load_seat(args.finisher)
+        judge = _load_seat(args.judge)
     except (ImportError, AttributeError, ValueError) as e:
         print(f"warden: cannot load seat: {e}", file=sys.stderr)
         return 2
     team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
-                   drafter=drafter, finisher=finisher, max_cycles=args.max_cycles)
+                   drafter=drafter, finisher=finisher, judge=judge, max_cycles=args.max_cycles)
     result = team.run(args.path, authorization=auth, findings=findings)
     payload = {
         "decision": result.decision,
@@ -90,6 +94,9 @@ def _tagteam(args) -> int:
         "reobserved": [d.identity for d in result.reobserved],
         "swizzle_sound": result.swizzle_sound,
         "unmeasured": list(result.unmeasured),
+        "verdict": None if result.verdict is None else {
+            "decision": result.verdict.decision, "reasons": list(result.verdict.reasons),
+            "judge": result.verdict.judge},
     }
     print(json.dumps(payload, indent=2))
     if result.swizzle_sound is False:

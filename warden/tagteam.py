@@ -33,11 +33,11 @@ from typing import Dict, Optional, Sequence
 from .authorization import Authorization, Unauthorized
 from .deletion import commented_variant, is_deletion, keep_variant, stamp_now
 from .ghost import defects_from_ghost, scan as ghost_scan
-from .guard import SeatBrokeCharter, violation, watch
+from .guard import SeatBrokeCharter, Snapshot, is_protected, violation, watch
 from .models import Defect, FileEdit, Transformation, TransformationStatus
-from .roles import Facts, Finisher, Drafter
+from .roles import Evidence, Facts, Finisher, Drafter, Judge, Verdict
 from .suite import SuiteRun, preserved, run_suite
-from .swizzle import swizzle_proofs_hold
+from .swizzle import governor_attacks, swizzle_proofs_hold
 
 DEFAULT_MAX_CYCLES = 10
 
@@ -76,6 +76,8 @@ class TagTeamResult:
     swizzle_sound: Optional[bool] = None
     #: Checks that did not run. A non-empty value turns ACCEPT into ACCEPT_UNVERIFIED.
     unmeasured: tuple[str, ...] = ()
+    #: What the Judge said, when one was seated.
+    verdict: Optional[Verdict] = None
 
     @property
     def suite_before(self) -> Optional[SuiteRun]:
@@ -100,6 +102,7 @@ class TagTeam:
         swizzle_root: Optional[Path] = None,
         drafter: Optional[Drafter] = None,
         finisher: Optional[Finisher] = None,
+        judge: Optional[Judge] = None,
         max_cycles: int = DEFAULT_MAX_CYCLES,
         run_tests: bool = True,
     ) -> None:
@@ -107,6 +110,7 @@ class TagTeam:
         self.swizzle_root = swizzle_root
         self.drafter = drafter
         self.finisher = finisher
+        self.judge = judge
         self.max_cycles = max_cycles
         #: Rule 7. Off only for callers that measure the suite some other way;
         #: the notes say so when it is off.
@@ -133,6 +137,57 @@ class TagTeam:
                 cycles=tuple(self._trail), converged=False, decision=decision,
                 notes=tuple(self._notes + [str(err)]), unmeasured=self._unmeasured(None))
 
+    def _judge(self, target, authorization, cycles, first, current, finish, finished, sound,
+               declined, python, notes, start):
+        """Hand the evidence to the Judge. Only the Judge can turn a run into ACCEPT.
+
+        REJECT puts the whole tree back as it was found. Anything the Judge
+        cannot decide, or fails at, leaves the changes standing but unjudged.
+        """
+        edits = [(e.path, e.kind) for c in cycles if c.applied and c.proposal for e in c.proposal.edits]
+        if finished and finish is not None:
+            edits += [(e.path, e.kind) for e in finish.edits]
+        attacks = None
+        if self.swizzle_root is not None and sound is True:
+            import warden
+            attacks = governor_attacks(swizzle_root=self.swizzle_root,
+                                       warden_root=Path(warden.__file__).resolve().parents[1], python=python)
+            notes.append("SWIZZLE attacks on the governor: "
+                         + ("not run" if attacks is None else
+                            f"{sum(a['status'] == 'violated' for a in attacks)} of {len(attacks)} violated"))
+        suite_after = self._suite(target, python, notes, "final state, for the Judge")
+        first_suite = next((c.suite_before for c in cycles if c.suite_before is not None), None)
+        ghost = self.ghost_tools_root is not None
+        evidence = Evidence(
+            target=str(target), scope=authorization.scope if authorization else "",
+            cycles=tuple((c.number, c.outcome) for c in cycles), changed=tuple(edits),
+            judging_files_touched=tuple(sorted({p for p, _ in edits if is_protected(p)})),
+            suite_before=first_suite if first_suite is not None else suite_after, suite_after=suite_after,
+            ghost_before=tuple(sorted(d.identity for d in first)) if ghost else None,
+            ghost_after=tuple(sorted(d.identity for d in current)) if ghost else None,
+            declined=tuple(sorted(declined)), swizzle_proofs=sound, attacks=attacks,
+            unmeasured=self._unmeasured(sound), notes=tuple(notes))
+        try:
+            with watch(target, "The Judge"):
+                verdict = self.judge.decide(evidence)
+        except SeatBrokeCharter:
+            raise
+        except Exception as err:  # noqa: BLE001 - a judge that fails has not approved anything
+            notes.append(f"The Judge failed ({type(err).__name__}); nothing was approved.")
+            return "ACCEPT_UNVERIFIED", None, " The Judge failed, so this is not approved."
+        said = "; ".join(verdict.reasons) or "no reasons given"
+        if verdict.decision == "ACCEPT":
+            return "ACCEPT", verdict, f" Judge: ACCEPT ({said})."
+        if verdict.decision == "REJECT":
+            undone = ""
+            if start is not None and start.restorable:
+                start.restore()
+                undone = " The whole tree was put back as it was found."
+            elif start is not None:
+                undone = " The tree was too large to restore automatically."
+            return "JUDGE_REJECTED", verdict, f" Judge: REJECT ({said}).{undone}"
+        return "ACCEPT_UNVERIFIED", verdict, f" Judge: INSUFFICIENT ({said}). The changes stand, unjudged."
+
     def _unmeasured(self, sound: Optional[bool]) -> tuple[str, ...]:
         out = []
         if self.ghost_tools_root is None:
@@ -141,6 +196,8 @@ class TagTeam:
             out.append("swizzle")
         if not self.run_tests:
             out.append("suite")
+        if self.judge is None:
+            out.append("judge")
         return tuple(out)
 
     def _run(self, target: Path, authorization: Optional[Authorization],
@@ -150,18 +207,32 @@ class TagTeam:
         observed = self._observe(target, findings, python, notes)
         first = observed
         base0 = _fingerprint(target)
+        start = Snapshot(target) if self.judge is not None else None
+        declined: set[str] = set()
 
         def stop(decision: str, why: str, cycles=(), converged=False, current=None,
                  finish=None, finished=False) -> TagTeamResult:
             missing = self._unmeasured(sound)
-            if decision == "ACCEPT" and missing:
+            candidate = decision == "ACCEPT"
+            gaps = tuple(m for m in missing if m != "judge")
+            if candidate and missing:
                 decision = "ACCEPT_UNVERIFIED"
                 why += f" Not measured: {', '.join(missing)}. Nothing here says those checks would have passed."
+            verdict = None
+            reobserved = observed if current is None else current
+            if candidate and self.judge is not None:
+                judged, verdict, extra = self._judge(
+                    target, authorization, tuple(cycles), first, reobserved, finish, finished,
+                    sound, declined, python, notes, start)
+                why += extra
+                # Whatever the Judge says, a run with gaps in its measurements is not a plain ACCEPT.
+                decision = "ACCEPT_UNVERIFIED" if judged == "ACCEPT" and gaps else judged
             return TagTeamResult(
                 target=str(target), baseline=base0, observed=first,
-                reobserved=observed if current is None else current, cycles=tuple(cycles),
+                reobserved=reobserved, cycles=tuple(cycles),
                 converged=converged, decision=decision, notes=tuple(notes + [why]),
-                finish=finish, finished=finished, swizzle_sound=sound, unmeasured=missing)
+                finish=finish, finished=finished, swizzle_sound=sound, unmeasured=missing,
+                verdict=verdict)
 
         if self.drafter is None:
             return stop("INCONCLUSIVE", "No drafter. Tag team observed only; nothing can be proposed.")
@@ -178,8 +249,7 @@ class TagTeam:
         cycles: list[Cycle] = self._trail
         converged = False
         seen: set[str] = set()
-        #: Findings whose removal failed a test. They are not offered to the Drafter again.
-        declined: set[str] = set()
+        #: Findings whose removal failed a test (`declined`) are not offered to the Drafter again.
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
             offered = tuple(d for d in observed if d.identity not in declined)
