@@ -118,7 +118,7 @@ Running a repository's tests runs its code, so Rule 7 happens only after a human
 CLI over a git work tree. Default is read-only. Writes require
 `--authorize ACTOR --reason TEXT`.
 
-`warden tagteam PATH --drafter MODULE:FACTORY --finisher MODULE:FACTORY --ghost-root GHOST_TOOLS --swizzle-root SWIZZLE`
+`warden tagteam PATH --drafter MODULE:FACTORY --finisher MODULE:FACTORY --ghost-root GHOST_TOOLS --swizzle-root SWIZZLE --assay-root ASSAY --assay-floor N`
 runs the whole loop and the hand-off (`--max-cycles`, default 10). Without
 `--drafter` it can only observe (`INCONCLUSIVE`). Without `--finisher` it stops
 when the loop converges.
@@ -145,6 +145,7 @@ its markers is Warden's; every other section survives reruns untouched.
 - Tag team without a grant does not write; without a drafter it only observes. **VERIFIED** by `tests/test_tagteam.py`.
 - The loop cycles until the drafter runs dry, stops at the cycle limit, and notices a drafter going in circles. **VERIFIED** by `tests/test_tagteam.py`.
 - The finisher runs once, only after convergence, and a finishing change that breaks the suite is put back while the loop's result stands. **VERIFIED** by `tests/test_tagteam.py`.
+- With `--assay-root` and `--swizzle-root`, Ghost is graded against ASSAY's answer key before anything is written; an unproven key or an ungradable specimen stops the run, and the score goes to the Judge with your floor. **VERIFIED** by `tests/test_assay_in_loop.py`, and live on CNS (Ghost caught 3 of 5).
 - SWIZZLE's proofs failing stops the write; not configuring SWIZZLE is said out loud. **VERIFIED** by `tests/test_tagteam.py`.
 - A change that breaks the target's suite is put back; a red or empty suite means nothing is written. **VERIFIED** by `tests/test_rule7_suite_gate.py`.
 - Audit IDs survive reruns, are never reused, and a Fixed defect that returns is reopened under its own ID. **VERIFIED** by `tests/test_audit.py`.

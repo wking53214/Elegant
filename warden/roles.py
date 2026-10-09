@@ -98,6 +98,9 @@ class Evidence:
     #: Checks that never ran, by name.
     unmeasured: tuple[str, ...]
     notes: tuple[str, ...] = field(default=())
+    #: Ghost graded against ASSAY's answer key: key_proven, failure_modes, caught,
+    #: escaped, misnamed, floor (the fewest failure modes Ghost must catch). None: not run.
+    assay: Optional[Mapping[str, object]] = None
 
 
 @dataclass(frozen=True)
