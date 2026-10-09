@@ -56,7 +56,7 @@ def _dead(root):
 def test_unused_code_passes_both_tests_and_is_commented_out_not_deleted(tmp_path, ghost):
     _repo(tmp_path)
     result = _team().run(tmp_path, findings=[DEAD], authorization=_auth(tmp_path))
-    assert result.decision == "ACCEPT" and result.cycles[0].outcome == "APPLIED"
+    assert result.decision.startswith("ACCEPT") and result.cycles[0].outcome == "APPLIED"
     text = _dead(tmp_path).read_text(encoding="utf-8")
     assert _dead(tmp_path).exists()
     assert "# WARDEN COMMENTED OUT 20" in text and "ghost-dead1" in text
@@ -85,7 +85,7 @@ def test_code_called_by_name_fails_the_keep_test_and_survives(tmp_path, ghost):
         "def pytest_sessionstart(session):\n"
         "    getattr(dead, 'unused', lambda: None)()\n", encoding="utf-8")
     result = _team().run(tmp_path, findings=[DEAD], authorization=_auth(tmp_path))
-    assert result.decision == "ACCEPT" and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
+    assert result.decision.startswith("ACCEPT") and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
     assert [c.outcome for c in result.cycles] == ["DECLINED", "NOTHING_TO_PROPOSE"]
     assert any("keep test FAILED" in n for n in result.notes)
     assert any("declined and left in place" in n for n in result.notes)
@@ -109,7 +109,7 @@ def test_a_removal_that_adds_ghost_findings_is_put_back(tmp_path, ghost, monkeyp
 
     monkeypatch.setattr(tagteam, "ghost_scan", scan)
     result = _team().run(tmp_path, findings=[DEAD], authorization=_auth(tmp_path))
-    assert result.decision == "ACCEPT" and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
+    assert result.decision.startswith("ACCEPT") and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
     assert any("comment-out test failed" in n for n in result.notes)
 
 

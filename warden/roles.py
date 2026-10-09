@@ -41,6 +41,9 @@ class Facts:
     remaining: tuple[Defect, ...]
     #: How many loop cycles ran.
     cycles: int
+    #: Checks that did not run ("ghost", "swizzle", "suite"). Empty `remaining` with
+    #: "ghost" here means Ghost was never asked, not that nothing is wrong.
+    unmeasured: tuple[str, ...] = ()
 
 
 @runtime_checkable
