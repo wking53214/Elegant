@@ -175,6 +175,10 @@ class Transformation:
             elif edit.kind == "write":
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(edit.new, encoding="utf-8")
+            elif edit.kind == "delete":
+                if not path.is_file():
+                    raise FileNotFoundError(edit.path)
+                path.unlink()
             else:
                 raise ValueError(f"unknown edit kind {edit.kind!r}")
             written.append(edit.path)
@@ -229,7 +233,7 @@ class Transformation:
 @dataclass(frozen=True)
 class FileEdit:
     path: str
-    kind: str  # "replace" | "write"
+    kind: str  # "replace" | "write" | "delete"
     new: str
     old: str = ""
     replace_all: bool = False

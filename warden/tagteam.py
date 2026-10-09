@@ -31,8 +31,9 @@ from pathlib import Path
 from typing import Dict, Optional, Sequence
 
 from .authorization import Authorization, Unauthorized
+from .deletion import commented_variant, is_deletion, keep_variant, stamp_now
 from .ghost import defects_from_ghost, scan as ghost_scan
-from .models import Defect, Transformation, TransformationStatus
+from .models import Defect, FileEdit, Transformation, TransformationStatus
 from .roles import Facts, Finisher, Drafter
 from .suite import SuiteRun, preserved, run_suite
 from .swizzle import swizzle_proofs_hold
@@ -143,29 +144,60 @@ class TagTeam:
         cycles: list[Cycle] = []
         converged = False
         seen: set[str] = set()
+        #: Findings whose removal failed a test. They are not offered to the Drafter again.
+        declined: set[str] = set()
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
-            proposal = self.drafter.propose(target, observed, baseline)
+            offered = tuple(d for d in observed if d.identity not in declined)
+            proposal = self.drafter.propose(target, offered, baseline)
             if proposal is None or not proposal.edits:
                 cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
                 converged = True
                 break
             key = _edits_key(proposal)
+            removes = is_deletion(target, proposal)
+            if removes:
+                scope, why = self._keep_test(target, proposal, observed, python, notes, number)
+                if scope == "systemic":
+                    cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
+                    return stop("REJECT", f"Cycle {number}: the removal was not applied. {why}", cycles)
+                original = proposal
+                proposal = None if scope else _commented(target, proposal)
+                if proposal is None:
+                    why = why or "The removed code could not be commented out precisely."
+                    declined.update(d.identity for d in original.known_defects)
+                    cycles.append(Cycle(number, len(observed), original, False, "DECLINED"))
+                    notes.append(f"Cycle {number}: removal declined, code left as it is. {why}")
+                    continue
+                key = _edits_key(proposal)
             if key in seen:
                 cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
                 return stop("NOT_CONVERGED", f"Cycle {number}: the Drafter repeated an earlier "
                             "proposal, so the loop is going in circles. Stopped.", cycles)
             seen.add(key)
-            cycle = self._apply(target, proposal, authorization, python, notes, number, len(observed))
+            cycle = self._apply(target, proposal, authorization, python, notes, number,
+                                len(observed))
             cycles.append(cycle)
             if cycle.outcome == "SUITE_RED":
                 return stop("INCONCLUSIVE", f"Cycle {number}: the suite is not green; nothing was written.", cycles)
             if cycle.outcome != "APPLIED":
                 return stop("REJECT", f"Cycle {number}: {cycle.outcome}. The change was put back; "
                             "the loop stopped.", cycles)
-            observed = self._reinspect(target, observed, python, notes)
+            after = self._reinspect(target, observed, python, notes)
+            new = {d.ghost_id for d in after if d.ghost_id} - {d.ghost_id for d in observed if d.ghost_id}
+            if removes and new:
+                _restore(target, cycle.restore)
+                proposal.status = TransformationStatus.REJECTED
+                cycle.applied, cycle.outcome = False, "DECLINED"
+                declined.update(d.identity for d in proposal.known_defects)
+                notes.append(f"Cycle {number}: comment-out test failed. The change produced new Ghost "
+                             f"finding(s) {sorted(new)}; it was put back and the code left as it is.")
+                continue
+            observed = after
         if not converged:
             return stop("NOT_CONVERGED", f"No convergence in {self.max_cycles} cycles.", cycles)
+        if declined:
+            notes.append(f"Removals declined and left in place: {sorted(declined)}.")
         if observed and self.ghost_tools_root is not None:
             notes.append(f"Drafter is out of proposals but Ghost still reports {len(observed)} finding(s). "
                          "Converged means no proposals left, not zero findings.")
@@ -200,8 +232,49 @@ class TagTeam:
 
     # -- steps ------------------------------------------------------------
 
+    def _keep_test(self, target: Path, proposal: Transformation, observed: tuple[Defect, ...],
+                   python: str, notes: list[str], number: int) -> tuple[str, str]:
+        """"What happens if I don't delete it?" Returns ("", "") on pass, else (scope, reason): "systemic" stops the loop, "candidate" declines this one removal.
+
+        The code is kept but made to raise when it runs. If the suite then fails,
+        something executes it. Files are restored whatever happens.
+        """
+        if self.ghost_tools_root is None:
+            return "systemic", "Ghost is not configured, so the removal cannot be validated."
+        if not self.run_tests:
+            return "systemic", "The suite is not being run, so the removal cannot be validated."
+        if self._calibrate(python, notes) is False:
+            return "systemic", "SWIZZLE's proofs do not hold."
+        wanted = {d.ghost_id for d in proposal.known_defects if d.ghost_id}
+        if not wanted:
+            return "candidate", "The removal cites no Ghost finding to validate it against."
+        if not wanted <= {d.ghost_id for d in observed if d.ghost_id}:
+            return "candidate", "Ghost does not report the finding behind this removal."
+        variant = keep_variant(target, proposal)
+        if variant is None:
+            return "candidate", "The removed code cannot be made to fail loudly, so the keep test cannot run."
+        before = self._suite(target, python, notes, f"cycle {number} keep test baseline")
+        if before is None or not before.green:
+            return "systemic", "The suite is not green."
+        snapshot = {rel: (target / rel).read_text(encoding="utf-8") for rel in variant}
+        try:
+            for rel, text in variant.items():
+                (target / rel).write_text(text, encoding="utf-8")
+            trapped = self._suite(target, python, notes, f"cycle {number} keep test (code made to fail)")
+        finally:
+            _restore(target, snapshot)
+        if trapped is None or preserved(before, trapped) is not None:
+            notes.append(f"Cycle {number}: keep test FAILED. The suite noticed when the code broke, "
+                         "so something uses it.")
+            return "candidate", "Keep test failed: the code is still used."
+        notes.append(f"Cycle {number}: keep test passed. Nothing ran the code when it was made to fail.")
+        return "", ""
+
     def _apply(self, target: Path, proposal: Transformation, auth: Authorization, python: str,
-               notes: list[str], number: int, seen: int) -> "_Applied":
+               notes: list[str], number: int, seen: int, validated: bool = False) -> "_Applied":
+        if not validated and is_deletion(target, proposal):
+            notes.append("A removal reached the applier without two loop validations. Refused.")
+            return _Applied(number, seen, proposal, False, "REFUSED", None, None, {})
         before = self._suite(target, python, notes, f"cycle {number} before")
         if before is not None and not before.green:
             proposal.status = TransformationStatus.PROPOSED
@@ -273,6 +346,18 @@ class _Applied(Cycle):
     def __init__(self, number, observed, proposal, applied, outcome, before, after, restore):
         super().__init__(number, observed, proposal, applied, outcome, before, after)
         self.restore = restore
+
+
+def _commented(target: Path, proposal: Transformation) -> Optional[Transformation]:
+    """The same proposal, but commenting the code out instead of deleting it."""
+    files = commented_variant(target, proposal, stamp_now())
+    if files is None:
+        return None
+    proposal.edits = tuple(FileEdit(path=rel, kind="write", new=text,
+                                    old=(target / rel).read_text(encoding="utf-8"))
+                           for rel, text in files.items())
+    proposal.intent = "comment out unused code (not deleted): " + proposal.intent
+    return proposal
 
 
 def _fingerprint(target: Path) -> str:

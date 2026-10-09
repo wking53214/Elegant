@@ -57,3 +57,27 @@ class FakeFinisher:
         self.calls += 1
         self.facts = facts
         return _transformation(target, (), baseline, self.path, self.new_text)
+
+
+class RemovingDrafter:
+    """Proposes deleting `path`, citing a Ghost finding, every time it is asked."""
+
+    def __init__(self, path="pkg/dead.py", cites="ghost-dead1"):
+        self.path, self.cites, self.calls = path, cites, 0
+
+    def propose(self, target, observed, baseline):
+        from warden.models import Defect, DefectSeverity
+        target = Path(target)
+        path = target / self.path
+        if self.cites and self.cites not in {d.identity for d in observed}:
+            return None
+        if not path.is_file() or "WARDEN COMMENTED OUT" in path.read_text(encoding="utf-8"):
+            return None
+        self.calls += 1
+        defect = Defect(summary="unused", severity=DefectSeverity.LOW, ghost_id=self.cites)
+        return Transformation(
+            target=str(target.resolve()), intent="remove unused code", architectural_reason="test",
+            affected_files=(self.path,), expected_behavior="none", preservation_requirements=(),
+            known_defects=(defect,), transformation_scope="code", baseline_reference=baseline,
+            evidence=(), edits=(FileEdit(path=self.path, kind="delete", new=""),),
+            status=TransformationStatus.PROPOSED)
