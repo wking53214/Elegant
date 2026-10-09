@@ -23,7 +23,7 @@ cycles until the Drafter has nothing left to propose (or a cycle limit is
 hit). Only then does Warden hand the code, once, to the Finisher, together with the facts it measured (the suite result and what Ghost still reports), so the Finisher counts and detects nothing itself. The Finisher beautifies the code and writes the final README. The Finisher's change goes through
 the same gate.
 
-Version `0.7.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
+Version `0.8.0`. Stdlib only. Python 3.11 or newer; CI runs 3.11 and 3.12.
 
 ## WHY IT EXISTS
 
@@ -205,12 +205,27 @@ not measured if it says it scanned nothing.
 **The handshake with the other repositories.** Judge, Drafter and Burnish build
 against Warden's shapes (`Evidence`, `Verdict`, `Facts`, `Transformation`). Warden
 exposes `warden.CONTRACT` (now `"1"`) and raises it only when one of those shapes
-changes in a way that breaks a seat written for the old shape. A seat can declare
+changes in a way that breaks a seat written for the old shape. Every seat must declare
 `requires_contract = "1"` (a class or instance attribute). When it names any other
-version, `warden tagteam` refuses to run, prints both versions, and exits 2. A seat
-that declares nothing still runs, with a warning on stderr and a note in the JSON.
+version, or declares nothing, `warden tagteam` refuses to run, says which, and exits 2
+with `SEAT_NOT_LOADED`. Nothing is run and nothing is written. There is no switch to
+skip the check: Judge, Drafter and Burnish all declare it, so it would only let an
+unchecked seat govern a run. The JSON names the contract Warden checked
+(`contract`) and the versions that took part (`versions`: Warden's version and
+contract; the commit and `pyproject.toml` version of each of `--ghost-root`,
+`--swizzle-root` and `--assay-root` that was given; and for each seat that was loaded
+its `spec`, declared `requires_contract`, installed `version` and `commit`). A value
+that cannot be found is `null`.
 A Judge verdict with no judge name or with extra fields is reported in the notes
 and does not crash the run.
+
+**Releasing, and the seats' pins.** Judge, Drafter and Burnish each depend on one exact Warden
+commit or `vX.Y.Z` tag, not on `main`. After a Warden change that seats must pick up (any change
+to `CONTRACT`, or to what a seat is checked for), tag the merge commit `vX.Y.Z` (matching
+`version` in `pyproject.toml`), then open one pull request per seat that moves its pin
+(see "Bumping the Warden pin" in each seat's README). Merge seats before the Warden change that
+needs them: this release makes a seat without `requires_contract` refuse to load, so the seats
+must declare it first.
 
 A proposal that changes nothing is dropped as `NOTHING_TO_PROPOSE`, not counted as
 applied. A proposal that is outside the grant's scope and cites no defect is declined
@@ -258,10 +273,10 @@ its markers is Warden's; every other section survives reruns untouched.
 - Exit codes are honest: only `ACCEPT` exits 0, and each row of the table above has a test; an unknown decision never exits 0; `warden audit` exits 2 when it cannot read findings or will not write. **VERIFIED** by `tests/test_honest_exit_codes.py`.
 - `unmeasured` names the instrument that was down (Ghost, suite, SWIZZLE, ASSAY) and every non-`ACCEPT` result has a one-sentence `reason`. **VERIFIED** by `tests/test_honest_exit_codes.py`.
 - SWIZZLE, Ghost and ASSAY output is read strictly, a hung Ghost times out as unavailable, and garbled Ghost output after an edit puts the tree back. **VERIFIED** by `tests/test_honest_exit_codes.py`.
-- The seat handshake (`requires_contract`), a missing or non-folder target, an empty reason, a no-op proposal and an out-of-scope proposal are handled as described above. **VERIFIED** by `tests/test_honest_exit_codes.py`.
+- The seat handshake (`requires_contract`: a mismatch or a missing declaration is refused, and the output names the `contract` and `versions`), a missing or non-folder target, an empty reason, a no-op proposal and an out-of-scope proposal are handled as described above. **VERIFIED** by `tests/test_honest_exit_codes.py`.
 - The whole loop with the real SWIZZLE, ASSAY, Ghost, Drafter and Judge, on a small scratch project, ended `ACCEPT` with exit 0 on 2026-10-09 (a check by hand, not a recorded test).
 
-275 tests exist in this tree. All pass on CPython 3.13 except the one live ASSAY read, which is skipped without `ASSAY_ROOT` and which CI runs on 3.11 and 3.12. The full run takes about 6 minutes.
+313 tests exist in this tree. All pass on CPython 3.13 except the one live ASSAY read, which is skipped without `ASSAY_ROOT` and which CI runs on 3.11 and 3.12. The full run takes about 6 minutes.
 
 ## WHAT IS BEAUTIFUL
 
@@ -313,7 +328,7 @@ authorized change, oracle ACCEPT, on a scratch demo. Recorded in
   adversary is uncalibrated; the decision itself does not change.
 - Ghost reports how many files it scanned only on its error stream (`scanning N file(s)`), not in its JSON. Warden reads that line; if Ghost stops printing it, Warden cannot tell a clean tree from an empty one, except when Ghost itself exits with an error.
 - A run whose only proposals were all declined as out of scope ends as `ACCEPT` or `ACCEPT_UNVERIFIED` with nothing changed; the cycle records say `DECLINED`, and the Judge sees them.
-- The handshake only checks seats that declare `requires_contract`. Until Judge, Drafter and Burnish declare it, Warden warns and runs.
+- `versions` reports what it can read from files (`.git`, `pyproject.toml`, installed package metadata). A checkout that is not a git folder, or a seat installed without version information, shows `null` for that field. SWIZZLE finds Ghost and ASSAY itself (`$GHOST_TOOLS`, `$ASSAY`, a sibling folder) when Warden does not pass them; in that case Warden does not know which copy SWIZZLE used.
 - SWIZZLE attacks that did not run are noted but do not by themselves turn an `ACCEPT` into `ACCEPT_UNVERIFIED`; the Judge receives them as not measured.
 
 ## ARCHITECTURAL DEBT

@@ -42,6 +42,7 @@ def _t(target, observed, baseline, path, new, cites=()):
 
 
 class Once:
+    requires_contract = "1"
     path, text = "NOTE.md", "changed\\n"
     def __init__(self): self.done = False
     def propose(self, target, observed, baseline):
@@ -55,6 +56,7 @@ class Breaker(Once):
 
 
 class Forever:
+    requires_contract = "1"
     n = 0
     def propose(self, target, observed, baseline):
         Forever.n += 1
@@ -62,15 +64,18 @@ class Forever:
 
 
 class Crasher:
+    requires_contract = "1"
     def propose(self, target, observed, baseline): raise RuntimeError("boom")
 
 
 class Nothing:
+    requires_contract = "1"
     def propose(self, target, observed, baseline): return None
 
 
 class NoOp:
     """Proposes to write the file exactly as it already is."""
+    requires_contract = "1"
     calls = 0
     def propose(self, target, observed, baseline):
         NoOp.calls += 1
@@ -80,6 +85,7 @@ class NoOp:
 
 class CodeFile:
     """Out of a documentation grant's scope, citing no defect; then runs dry."""
+    requires_contract = "1"
     def __init__(self): self.n = 0
     def propose(self, target, observed, baseline):
         self.n += 1
@@ -88,12 +94,14 @@ class CodeFile:
 
 
 class CodeFileAlways:
+    requires_contract = "1"
     def propose(self, target, observed, baseline):
         return _t(target, observed, baseline, "pkg/__init__.py", "VALUE = 1  # tidy\\n")
 
 
 class ScopeAndTest:
     """An out-of-scope edit alongside an edit to a test file."""
+    requires_contract = "1"
     def propose(self, target, observed, baseline):
         p = _t(target, observed, baseline, "pkg/__init__.py", "VALUE = 1  # tidy\\n")
         q = _t(target, observed, baseline, "tests/test_x.py", "def test_v():\\n    assert True\\n")
@@ -113,6 +121,7 @@ class RejectingJudge(Judge):
 
 class OddJudge:
     """A verdict with no judge name and an extra field."""
+    requires_contract = "1"
     def decide(self, evidence):
         v = Verdict("ACCEPT", ("ok",))
         object.__setattr__(v, "extra", 1)
@@ -120,6 +129,7 @@ class OddJudge:
 
 
 class Finisher:
+    requires_contract = "1"
     def finish(self, target, baseline, facts):
         return _t(target, (), baseline, "pkg/__init__.py", "VALUE = 2\\n")
 
@@ -579,11 +589,43 @@ def test_a_seat_with_the_right_contract_runs_with_no_warning(rig):
     assert "requires_contract" not in err and code in (0, 3)
 
 
-def test_a_seat_without_a_contract_runs_with_a_warning_and_a_note(rig):
+def test_a_seat_without_a_contract_is_refused_and_nothing_runs(rig):
     code, payload, err = rig.run(drafter="exit_seats:Unversioned")
+    assert code == 2 and payload["decision"] == "SEAT_NOT_LOADED"
+    assert "does not say which Warden contract" in payload["reason"]
+    assert 'requires_contract = "1"' in payload["reason"]
     assert "requires_contract" in err
-    assert any("requires_contract" in n for n in payload["notes"])
-    assert code != 2
+    assert (rig.target / "NOTE.md").read_text(encoding="utf-8") == "old\n"
+
+
+def test_each_seat_position_refuses_a_missing_declaration(rig):
+    for flag in ("drafter", "finisher", "judge"):
+        code, payload, _ = rig.run(**{flag: "exit_seats:Unversioned"})
+        assert code == 2 and payload["decision"] == "SEAT_NOT_LOADED", flag
+
+
+def test_the_output_names_the_contract_checked_and_the_versions_that_took_part(rig):
+    code, payload, _ = rig.run(drafter="exit_seats:Current", judge="exit_seats:Judge")
+    assert payload["contract"] == warden.CONTRACT == "1"
+    v = payload["versions"]
+    assert v["warden"]["version"] == warden.__version__ and v["warden"]["contract"] == "1"
+    assert v["seats"]["drafter"]["spec"] == "exit_seats:Current"
+    assert v["seats"]["drafter"]["requires_contract"] == "1"
+    assert v["seats"]["judge"]["requires_contract"] == "1"
+    assert v["seats"]["finisher"] is None
+    for key, folder in (("ghost_tools", "ghost"), ("swizzle", "swizzle"), ("assay", "assay")):
+        assert v[key]["path"].endswith(folder) and v[key]["commit"] is None and v[key]["version"] is None
+
+
+def test_an_instrument_that_was_not_given_is_reported_as_null(rig):
+    _, payload, _ = rig.run(measured=False)
+    v = payload["versions"]
+    assert v["ghost_tools"] is None and v["swizzle"] is None and v["assay"] is None
+
+
+def test_a_refusal_also_names_the_contract_checked(rig):
+    _, payload, _ = rig.run(drafter="exit_seats:Old")
+    assert payload["contract"] == "1"
 
 
 def test_a_verdict_with_no_judge_name_and_an_extra_field_is_reported_not_a_crash(rig):

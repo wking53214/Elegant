@@ -18,7 +18,7 @@ from pathlib import Path
 
 from . import CONTRACT, __version__
 from .authorization import Unauthorized, grant
-from . import audit as audit_file, textio
+from . import audit as audit_file, textio, versions
 from .ghost import load_report, scan as ghost_scan
 from .tagteam import TagTeam
 
@@ -114,7 +114,7 @@ def _print_json(payload) -> None:
 
 def _stop(decision: str, reason: str, notes: list[str] | None = None) -> int:
     """End before a run: valid JSON on stdout, the reason on stderr, and the exit code for `decision`."""
-    _print_json({"decision": decision, "reason": reason, "notes": (notes or []) + [reason]})
+    _print_json({"decision": decision, "reason": reason, "contract": CONTRACT, "notes": (notes or []) + [reason]})
     print(f"warden: {reason}", file=sys.stderr)
     return EXIT_CODES[decision]
 
@@ -168,6 +168,8 @@ def _run_team(args, auth, findings, drafter, finisher, judge, warnings=()) -> in
         "notes": list(result.notes) + list(warnings),
         "observed": [d.identity for d in result.observed],
         "reobserved": [d.identity for d in result.reobserved],
+        "contract": CONTRACT,
+        "versions": _versions(args, drafter, finisher, judge),
         "swizzle_sound": result.swizzle_sound,
         "unmeasured": list(result.unmeasured),
         "ghost_scan": result.ghost_scan,
@@ -183,11 +185,23 @@ def _run_team(args, auth, findings, drafter, finisher, judge, warnings=()) -> in
     return EXIT_CODES.get(result.decision, 1)
 
 
-def _load_seat(spec, warnings: list[str] | None = None):
+def _versions(args, drafter, finisher, judge) -> dict:
+    """What took part in this run: Warden, the instrument checkouts given, and the seats loaded."""
+    import warden
+    return versions.report(
+        warden_module=warden, contract=CONTRACT, version=__version__,
+        ghost_root=args.ghost_root, swizzle_root=args.swizzle_root, assay_root=args.assay_root,
+        seats={"drafter": versions.seat(args.drafter, drafter),
+               "finisher": versions.seat(args.finisher, finisher),
+               "judge": versions.seat(args.judge, judge)})
+
+
+def _load_seat(spec, warnings: list[str] | None = None):  # `warnings` is kept for old callers; unused now
     """The seat-filler named as MODULE:FACTORY, built with no arguments; None if not named.
 
-    A seat may declare `requires_contract`, the version of Warden's shapes it was written for. A
-    different version is refused. A seat that declares nothing runs, with a warning.
+    A seat must declare `requires_contract`, the version of Warden's shapes it was written for. A
+    different version is refused, and so is a seat that declares nothing: Warden cannot know such
+    a seat fits, and it will not govern a run with a part it has not checked.
     """
     if not spec:
         return None
@@ -197,10 +211,10 @@ def _load_seat(spec, warnings: list[str] | None = None):
     seat = getattr(importlib.import_module(module_name), attr)()
     wanted = getattr(seat, "requires_contract", None)
     if wanted is None:
-        if warnings is not None:
-            warnings.append(f"The seat {spec} does not declare requires_contract, so its fit with this Warden "
-                            f"(contract {CONTRACT}) was not checked.")
-    elif not isinstance(wanted, str) or wanted != CONTRACT:
+        raise ContractMismatch(f"The seat {spec} does not say which Warden contract it was written for, so its fit "
+                               f"with this Warden (contract {CONTRACT!r}) cannot be checked. Nothing was run. "
+                               f'Add requires_contract = "{CONTRACT}" to the seat.')
+    if not isinstance(wanted, str) or wanted != CONTRACT:
         raise ContractMismatch(f"The seat {spec} was written for Warden contract {wanted!r} but this Warden "
                                f"is contract {CONTRACT!r}. Nothing was run.")
     return seat
