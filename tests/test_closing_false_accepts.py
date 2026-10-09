@@ -394,7 +394,7 @@ def _cli(tmp_path, monkeypatch, capsys, body: str, extra=()):
 
 def test_a_seat_that_prints_cannot_corrupt_the_json(tmp_path, monkeypatch, capsys):
     code, out, _ = _cli(tmp_path, monkeypatch, capsys,
-                        "class Seat:\n    def propose(self, target, observed, baseline):\n"
+                        "class Seat:\n    requires_contract = \"1\"\n    def propose(self, target, observed, baseline):\n"
                         "        print('hello from the seat')\n        return None\n")
     payload = json.loads(out.out)
     assert payload["decision"] == "ACCEPT_UNVERIFIED" and code == 3
@@ -403,7 +403,7 @@ def test_a_seat_that_prints_cannot_corrupt_the_json(tmp_path, monkeypatch, capsy
 
 def test_a_seat_that_crashes_gives_json_and_a_nonzero_exit(tmp_path, monkeypatch, capsys):
     code, out, target = _cli(tmp_path, monkeypatch, capsys,
-                             "class Seat:\n    def propose(self, target, observed, baseline):\n"
+                             "class Seat:\n    requires_contract = \"1\"\n    def propose(self, target, observed, baseline):\n"
                              "        raise RuntimeError('boom')\n")
     payload = json.loads(out.out)
     assert payload["decision"] == "ERROR" and code == 4 and "Traceback" not in out.out
