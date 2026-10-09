@@ -24,7 +24,7 @@ def _repo(root: Path, test_body: str = "    assert True\n") -> None:
 
 
 def _auth(root: Path):
-    return grant("william", "transform", str(root.resolve()), "documentation", "rule 7 test")
+    return grant("william", "transform", str(root.resolve()), "code", "rule 7 test")
 
 
 def _breaker():

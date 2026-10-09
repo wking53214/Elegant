@@ -155,6 +155,8 @@ class Transformation:
             raise Unauthorized(f"refusing to apply in status {self.status.value}")
         written = []
         for edit in self.edits:
+            if Path(edit.path).is_absolute() or not (root_p / edit.path).resolve().is_relative_to(root_p.resolve()):
+                raise Unauthorized(f"refusing edit outside the target: {edit.path!r}")
             path = root_p / edit.path
             if edit.kind == "replace":
                 if not path.is_file():
