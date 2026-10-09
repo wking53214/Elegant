@@ -68,7 +68,8 @@ class RemovingDrafter:
     def propose(self, target, observed, baseline):
         from warden.models import Defect, DefectSeverity
         target = Path(target)
-        if not (target / self.path).is_file():
+        path = target / self.path
+        if not path.is_file() or "WARDEN COMMENTED OUT" in path.read_text(encoding="utf-8"):
             return None
         self.calls += 1
         defect = Defect(summary="unused", severity=DefectSeverity.LOW, ghost_id=self.cites)
