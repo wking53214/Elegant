@@ -33,12 +33,17 @@ from typing import Dict, Optional, Sequence
 from .authorization import Authorization, Unauthorized
 from .deletion import commented_variant, is_deletion, keep_variant, stamp_now
 from .ghost import defects_from_ghost, scan as ghost_scan
+from .guard import SeatBrokeCharter, violation, watch
 from .models import Defect, FileEdit, Transformation, TransformationStatus
 from .roles import Facts, Finisher, Drafter
 from .suite import SuiteRun, preserved, run_suite
 from .swizzle import swizzle_proofs_hold
 
 DEFAULT_MAX_CYCLES = 10
+
+
+class GhostUnavailable(RuntimeError):
+    """Ghost could not be run or its output could not be read. UNKNOWN, not zero findings."""
 
 
 @dataclass
@@ -69,6 +74,8 @@ class TagTeamResult:
     finished: bool = False
     #: True: SWIZZLE's proofs held. False: they did not. None: not configured.
     swizzle_sound: Optional[bool] = None
+    #: Checks that did not run. A non-empty value turns ACCEPT into ACCEPT_UNVERIFIED.
+    unmeasured: tuple[str, ...] = ()
 
     @property
     def suite_before(self) -> Optional[SuiteRun]:
@@ -114,9 +121,31 @@ class TagTeam:
         python: str = "",
     ) -> TagTeamResult:
         target = Path(target).resolve()
-        python = python or sys.executable
         _refuse_self_authorization(target, authorization)
-        notes: list[str] = []
+        self._notes: list[str] = []
+        self._trail: list[Cycle] = []
+        try:
+            return self._run(target, authorization, findings, python or sys.executable)
+        except (SeatBrokeCharter, GhostUnavailable) as err:
+            decision = "REJECT" if isinstance(err, SeatBrokeCharter) else "INCONCLUSIVE"
+            return TagTeamResult(
+                target=str(target), baseline="", observed=(), reobserved=(),
+                cycles=tuple(self._trail), converged=False, decision=decision,
+                notes=tuple(self._notes + [str(err)]), unmeasured=self._unmeasured(None))
+
+    def _unmeasured(self, sound: Optional[bool]) -> tuple[str, ...]:
+        out = []
+        if self.ghost_tools_root is None:
+            out.append("ghost")
+        if self.swizzle_root is None or sound is False:
+            out.append("swizzle")
+        if not self.run_tests:
+            out.append("suite")
+        return tuple(out)
+
+    def _run(self, target: Path, authorization: Optional[Authorization],
+             findings: Optional[Sequence[dict]], python: str) -> TagTeamResult:
+        notes = self._notes
         sound = self._calibrate(python, notes)
         observed = self._observe(target, findings, python, notes)
         first = observed
@@ -124,24 +153,29 @@ class TagTeam:
 
         def stop(decision: str, why: str, cycles=(), converged=False, current=None,
                  finish=None, finished=False) -> TagTeamResult:
+            missing = self._unmeasured(sound)
+            if decision == "ACCEPT" and missing:
+                decision = "ACCEPT_UNVERIFIED"
+                why += f" Not measured: {', '.join(missing)}. Nothing here says those checks would have passed."
             return TagTeamResult(
                 target=str(target), baseline=base0, observed=first,
                 reobserved=observed if current is None else current, cycles=tuple(cycles),
                 converged=converged, decision=decision, notes=tuple(notes + [why]),
-                finish=finish, finished=finished, swizzle_sound=sound)
+                finish=finish, finished=finished, swizzle_sound=sound, unmeasured=missing)
 
         if self.drafter is None:
             return stop("INCONCLUSIVE", "No drafter. Tag team observed only; nothing can be proposed.")
         if authorization is None or not authorization.granted:
             # Show what would be proposed, change nothing.
-            proposal = self.drafter.propose(target, observed, _fingerprint(target))
+            with watch(target, "The Drafter"):
+                proposal = self.drafter.propose(target, observed, _fingerprint(target))
             cycle = Cycle(1, len(observed), proposal, False, "REFUSED")
             return stop("REFUSED", "Human authorization missing. Proposal stands. No write.",
                         cycles=[cycle])
         if sound is False:
             return stop("INCONCLUSIVE", "SWIZZLE's own proofs do not hold; nothing was written.")
 
-        cycles: list[Cycle] = []
+        cycles: list[Cycle] = self._trail
         converged = False
         seen: set[str] = set()
         #: Findings whose removal failed a test. They are not offered to the Drafter again.
@@ -149,12 +183,23 @@ class TagTeam:
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
             offered = tuple(d for d in observed if d.identity not in declined)
-            proposal = self.drafter.propose(target, offered, baseline)
+            with watch(target, "The Drafter"):
+                proposal = self.drafter.propose(target, offered, baseline)
             if proposal is None or not proposal.edits:
                 cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
                 converged = True
                 break
             key = _edits_key(proposal)
+            bad = violation(target, proposal, authorization)
+            if bad:
+                kind, why = bad
+                if kind == "escape" or not proposal.known_defects:
+                    cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
+                    return stop("REJECT", f"Cycle {number}: {why}. Nothing was written.", cycles)
+                declined.update(d.identity for d in proposal.known_defects)
+                cycles.append(Cycle(number, len(observed), proposal, False, "DECLINED"))
+                notes.append(f"Cycle {number}: change declined. {why}.")
+                continue
             removes = is_deletion(target, proposal)
             if removes:
                 scope, why = self._keep_test(target, proposal, observed, python, notes, number)
@@ -210,11 +255,18 @@ class TagTeam:
             return stop("ACCEPT", "Loop converged. No finisher configured.", cycles, converged=True)
 
         facts = Facts(suite=self._suite(target, python, notes, "converged"),
-                      remaining=observed, cycles=len([c for c in cycles if c.applied]))
-        finish = self.finisher.finish(target, _fingerprint(target), facts)
+                      remaining=observed, cycles=len([c for c in cycles if c.applied]),
+                      unmeasured=self._unmeasured(end_sound))
+        with watch(target, "The Finisher"):
+            finish = self.finisher.finish(target, _fingerprint(target), facts)
         if finish is None or not finish.edits:
             return stop("ACCEPT", "Loop converged. The Finisher had nothing to finish.",
                         cycles, converged=True)
+        bad = violation(target, finish, authorization)
+        if bad:
+            finish.status = TransformationStatus.REJECTED
+            return stop("FINISH_REJECTED", f"Finishing: {bad[1]}. The finishing change was not applied; "
+                        "the converged loop result stands.", cycles, converged=True, finish=finish)
         done = self._apply(target, finish, authorization, python, notes, 0, len(observed))
         if done.outcome != "APPLIED":
             return stop("FINISH_REJECTED", f"Finishing: {done.outcome}. The finishing change was put back; "
@@ -312,10 +364,21 @@ class TagTeam:
         if self.ghost_tools_root is None:
             notes.append("Ghost Tools scan SKIPPED: no ghost_tools_root. Observation is UNKNOWN.")
             return ()
-        observed = defects_from_ghost(
-            ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python))
+        observed = defects_from_ghost(self._scan(target, python))
         notes.append(f"Ghost Tools observed {len(observed)} finding(s).")
         return observed
+
+    def _scan(self, target: Path, python: str):
+        """Ghost's findings. Ghost reports only, so the tree must not change while it runs."""
+        try:
+            with watch(target, "Ghost Tools"):
+                return ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python)
+        except SeatBrokeCharter:
+            raise
+        except Exception as err:  # noqa: BLE001 - any failure to see is UNKNOWN, not "no findings"
+            raise GhostUnavailable(
+                f"Ghost could not be run or read ({type(err).__name__}: {str(err)[:120]}). "
+                "Observation is UNKNOWN; nothing further was attempted.") from err
 
     def _suite(self, target: Path, python: str, notes: list[str], when: str) -> Optional[SuiteRun]:
         if not self.run_tests:
@@ -330,8 +393,7 @@ class TagTeam:
                    notes: list[str]) -> tuple[Defect, ...]:
         if self.ghost_tools_root is None:
             return observed
-        reobserved = defects_from_ghost(
-            ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python))
+        reobserved = defects_from_ghost(self._scan(target, python))
         before_ids = {d.ghost_id for d in observed if d.ghost_id}
         after_ids = {d.ghost_id for d in reobserved if d.ghost_id}
         notes.append(f"Ghost re-inspected: {len(reobserved)} finding(s); "
@@ -375,11 +437,19 @@ def _edits_key(proposal: Transformation) -> str:
     return hashlib.sha256(repr([(e.path, e.kind, e.old, e.new) for e in proposal.edits]).encode()).hexdigest()
 
 
+def _is_warden(target: Path) -> bool:
+    """Warden's own tree, recognised by what it contains and not by what the folder is called."""
+    return (target / "warden" / "authorization.py").is_file()
+
+
 def _refuse_self_authorization(target: Path, authorization: Optional[Authorization]) -> None:
     """Warden may transform other repos. Transforming itself under its own
-    proposal is the self-certifying loop."""
-    if (target.name.lower() == "warden" and authorization and authorization.granted
-            and authorization.actor.lower() in {"warden", "self"}):
+    proposal is the self-certifying loop. Checked on the contents of the target
+    and on the actor, wherever the folder lives and whatever it is called."""
+    if authorization and authorization.granted and authorization.actor.strip().lower() in {"warden", "self", "unknown", ""}:
+        raise Unauthorized(f"{authorization.actor!r} cannot authorize a write; a human or external governor must.")
+    if authorization and authorization.granted and _is_warden(target) \
+            and authorization.actor.strip().lower().startswith(("warden", "drafter", "burnish", "ghost", "swizzle", "assay")):
         raise Unauthorized("Warden cannot authorize work on itself.")
 
 

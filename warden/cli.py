@@ -40,7 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     p_t.add_argument("--from-ghost", type=Path, default=None, help="findings JSON instead of a live scan")
     p_t.add_argument("--authorize", default=None, metavar="ACTOR")
     p_t.add_argument("--reason", default="")
-    p_t.add_argument("--scope", default="documentation")
+    p_t.add_argument("--scope", default="documentation",
+                     help="documentation: prose files only. code: anything outside tests, test config and CI")
 
     p_a = sub.add_parser("audit", help="WARDEN_AUDIT.md: Ghost findings under durable IDs (Rules 5, 9)")
     p_a.add_argument("path", type=Path)
@@ -88,12 +89,13 @@ def _tagteam(args) -> int:
         "observed": [d.identity for d in result.observed],
         "reobserved": [d.identity for d in result.reobserved],
         "swizzle_sound": result.swizzle_sound,
+        "unmeasured": list(result.unmeasured),
     }
     print(json.dumps(payload, indent=2))
     if result.swizzle_sound is False:
         print("warden: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
         return 2
-    return 0 if result.decision in {"ACCEPT", "INCONCLUSIVE", "REFUSED"} else 1
+    return {"ACCEPT": 0, "INCONCLUSIVE": 0, "REFUSED": 0, "ACCEPT_UNVERIFIED": 3}.get(result.decision, 1)
 
 
 def _load_seat(spec):

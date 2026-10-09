@@ -13,12 +13,12 @@ def _tree(root: Path) -> None:
     (root / "pkg" / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
     (root / "tests").mkdir()
     (root / "tests" / "test_x.py").write_text(
-        "def test_a():\n    assert True\n", encoding="utf-8")
+        "from pkg import VALUE\n\ndef test_a():\n    assert VALUE == 1\n", encoding="utf-8")
     (root / "NOTE.md").write_text("old note\n", encoding="utf-8")
 
 
 def _auth(root: Path):
-    return grant("william", "transform", str(root.resolve()), "documentation", "test")
+    return grant("william", "transform", str(root.resolve()), "code", "test")
 
 
 def _read(root: Path, name: str) -> str:
@@ -44,7 +44,7 @@ def test_loop_cycles_until_the_drafter_runs_dry(tmp_path: Path):
     _tree(tmp_path)
     drafter = FakeDrafter(steps=("one\n", "two\n", "three\n"))
     result = TagTeam(drafter=drafter).run(tmp_path, findings=[], authorization=_auth(tmp_path))
-    assert result.converged and result.decision == "ACCEPT"
+    assert result.converged and result.decision.startswith("ACCEPT")
     assert [c.outcome for c in result.cycles] == ["APPLIED"] * 3 + ["NOTHING_TO_PROPOSE"]
     assert _read(tmp_path, "NOTE.md") == "three\n"
 
@@ -54,7 +54,7 @@ def test_finisher_runs_once_and_only_after_the_loop(tmp_path: Path):
     finisher = FakeFinisher()
     result = TagTeam(drafter=FakeDrafter(steps=("a\n", "b\n")), finisher=finisher).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
-    assert finisher.calls == 1 and result.finished and result.decision == "ACCEPT"
+    assert finisher.calls == 1 and result.finished and result.decision.startswith("ACCEPT")
     assert _read(tmp_path, "README.md") == "final\n" and _read(tmp_path, "NOTE.md") == "b\n"
 
 
@@ -76,20 +76,19 @@ def test_max_cycles_stops_a_drafter_that_never_runs_dry(tmp_path: Path):
 
 def test_a_cycle_that_breaks_the_suite_is_put_back_and_stops_the_loop(tmp_path: Path):
     _tree(tmp_path)
-    breaking = "def test_a():\n    assert False\n"
-    drafter = FakeDrafter(steps=(breaking,), path="tests/test_x.py")
+    drafter = FakeDrafter(steps=("VALUE = 2\n",), path="pkg/__init__.py")
     result = TagTeam(drafter=drafter).run(tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "REJECT" and result.cycles[-1].outcome == "PUT_BACK"
-    assert _read(tmp_path, "tests/test_x.py") == "def test_a():\n    assert True\n"
+    assert _read(tmp_path, "pkg/__init__.py") == "VALUE = 1\n"
 
 
 def test_a_finisher_that_breaks_the_suite_is_put_back_but_the_loop_result_stands(tmp_path: Path):
     _tree(tmp_path)
-    breaking = FakeFinisher(path="tests/test_x.py", new_text="def test_a():\n    assert False\n")
+    breaking = FakeFinisher(path="pkg/__init__.py", new_text="VALUE = 2\n")
     result = TagTeam(drafter=FakeDrafter(steps=("kept\n",)), finisher=breaking).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "FINISH_REJECTED" and result.converged and not result.finished
-    assert _read(tmp_path, "tests/test_x.py") == "def test_a():\n    assert True\n"
+    assert _read(tmp_path, "pkg/__init__.py") == "VALUE = 1\n"
     assert _read(tmp_path, "NOTE.md") == "kept\n"
 
 
