@@ -29,12 +29,13 @@ def _auth(root, scope="documentation"):
 def measured(monkeypatch):
     monkeypatch.setattr(tagteam, "ghost_scan", lambda target, **kw: ())
     monkeypatch.setattr(TagTeam, "_calibrate", lambda self, python, notes: True)
+    monkeypatch.setattr(tagteam, "assay_score", lambda **kw: (True, {"key_proven": True, "failure_modes": 5, "caught": 3}, "ok"))
     monkeypatch.setattr(tagteam, "governor_attacks", lambda **kw: ({"scenario": "a", "severity": "high", "status": "held"},))
 
 
 def _team(judge, **kw):
     return TagTeam(drafter=FakeDrafter(steps=("new\n",)), judge=judge, ghost_tools_root=Path("."),
-                   swizzle_root=Path("."), **kw)
+                   swizzle_root=Path("."), assay_root=Path("."), **kw)
 
 
 def test_without_a_judge_a_run_can_never_be_a_plain_accept(tmp_path):
@@ -108,7 +109,7 @@ def test_evidence_says_none_when_a_check_never_ran_and_the_run_is_never_a_plain_
         tmp_path, findings=[], authorization=_auth(tmp_path))
     e = judge.evidence
     assert e.ghost_before is None and e.ghost_after is None and e.swizzle_proofs is None and e.attacks is None
-    assert set(e.unmeasured) == {"ghost", "swizzle"}
+    assert set(e.unmeasured) == {"ghost", "swizzle", "assay"} and e.assay is None
     assert result.decision == "ACCEPT_UNVERIFIED"
 
 

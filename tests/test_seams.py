@@ -180,7 +180,7 @@ def test_scope_vocabulary():
 def test_accept_without_ghost_swizzle_or_the_suite_is_marked_unverified(tmp_path):
     _repo(tmp_path)
     result = _run(tmp_path, FakeDrafter(steps=("x\n",)), scope="documentation", run_tests=False)
-    assert result.decision == "ACCEPT_UNVERIFIED" and set(result.unmeasured) == {"ghost", "swizzle", "suite", "judge"}
+    assert result.decision == "ACCEPT_UNVERIFIED" and set(result.unmeasured) == {"ghost", "swizzle", "assay", "suite", "judge"}
     assert any("Not measured" in n for n in result.notes)
 
 
@@ -188,8 +188,9 @@ def test_accept_is_plain_accept_only_when_everything_ran(tmp_path, monkeypatch):
     _repo(tmp_path)
     monkeypatch.setattr(tagteam, "ghost_scan", lambda target, **kw: ())
     monkeypatch.setattr(TagTeam, "_calibrate", lambda self, python, notes: True)
+    monkeypatch.setattr(tagteam, "assay_score", lambda **kw: (True, {"caught": 3, "failure_modes": 5}, "ok"))
     result = _run(tmp_path, FakeDrafter(steps=("x\n",)), scope="documentation",
-                  ghost_tools_root=Path("."), swizzle_root=Path("."), judge=FakeJudge("ACCEPT"))
+                  ghost_tools_root=Path("."), swizzle_root=Path("."), assay_root=Path("."), judge=FakeJudge("ACCEPT"))
     assert result.decision == "ACCEPT" and result.unmeasured == ()
 
 
@@ -197,7 +198,7 @@ def test_the_finisher_is_told_what_was_not_measured(tmp_path):
     _repo(tmp_path)
     finisher = FakeFinisher(path="README.md")
     _run(tmp_path, FakeDrafter(steps=()), scope="documentation", run_tests=False, finisher=finisher)
-    assert set(finisher.facts.unmeasured) == {"ghost", "swizzle", "suite", "judge"}
+    assert set(finisher.facts.unmeasured) == {"ghost", "swizzle", "assay", "suite", "judge"}
 
 
 # -- who may authorize --------------------------------------------------------
