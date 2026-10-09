@@ -88,7 +88,8 @@ def test_a_judge_that_writes_the_tree_is_caught_and_undone(tmp_path, measured):
             return Verdict("ACCEPT", ("fine",))
 
     result = _team(Writes()).run(tmp_path, findings=[], authorization=_auth(tmp_path))
-    assert result.decision == "REJECT" and (tmp_path / "NOTE.md").read_text(encoding="utf-8") == "new\n"
+    # The run did not end accepted, so the drafter's earlier edit is put back too (it used to stand).
+    assert result.decision == "REJECT" and (tmp_path / "NOTE.md").read_text(encoding="utf-8") == "old\n"
 
 
 def test_the_judge_gets_measured_evidence_not_wardens_opinion(tmp_path, measured):

@@ -11,11 +11,12 @@ beautification. Warden now receives its verdict through `warden.craft`.
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+
+from .isolation import absolute, run_instrument
 
 
 def swizzle_proofs_hold(
@@ -29,14 +30,9 @@ def swizzle_proofs_hold(
     target. An adversary whose proofs fail cannot back an ACCEPT. Returns
     (holds, one-line summary); a run that cannot start is (False, reason).
     """
-    env = os.environ.copy()
-    if swizzle_root:
-        env["PYTHONPATH"] = str(swizzle_root) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        proc = subprocess.run(
-            [python, "-m", "swizzle.cli", "prove"],
-            capture_output=True, text=True, env=env, timeout=180,
-        )
+        proc = run_instrument([python, "-m", "swizzle.cli", "prove"],
+                              roots=[swizzle_root], timeout=180)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, f"SWIZZLE proofs could not run: {exc}"
     lines = [ln for ln in proc.stdout.splitlines() if "proofs hold" in ln]
@@ -57,13 +53,10 @@ def governor_attacks(
     """
     import json
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(swizzle_root) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        proc = subprocess.run(
-            [python, "-m", "swizzle.cli", "governor", "--warden", str(warden_root), "--json"],
-            capture_output=True, text=True, env=env, timeout=900,
-        )
+        proc = run_instrument(
+            [python, "-m", "swizzle.cli", "governor", "--warden", str(absolute(warden_root)), "--json"],
+            roots=[swizzle_root], timeout=900)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if proc.returncode not in (0, 1):
@@ -94,13 +87,11 @@ def assay_score(
     """
     import json
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(swizzle_root) + os.pathsep + env.get("PYTHONPATH", "")
-    cmd = [python, "-m", "swizzle.cli", "assay", "--assay", str(assay_root), "--json"]
+    cmd = [python, "-m", "swizzle.cli", "assay", "--assay", str(absolute(assay_root)), "--json"]
     if ghost_root is not None:
-        cmd += ["--ghost-tools", str(ghost_root)]
+        cmd += ["--ghost-tools", str(absolute(ghost_root))]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=600)
+        proc = run_instrument(cmd, roots=[swizzle_root], timeout=600)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return None, {}, f"ASSAY grading could not run: {exc}"
     if proc.returncode == 2:

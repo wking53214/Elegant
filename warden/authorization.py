@@ -16,6 +16,17 @@ class Unauthorized(RuntimeError):
     """A transformation was asked to apply without a granted authorization."""
 
 
+#: Names that may never authorize a change to Warden's own tree: Warden itself
+#: and every other seat or instrument in the stack. Compared in lower case, as a prefix.
+SELF_ACTORS = ("warden", "the warden", "drafter", "burnish", "ghost", "ghost_tools",
+               "swizzle", "assay", "judge")
+
+
+def is_stack_actor(actor: str) -> bool:
+    """True when `actor` names Warden or another part of the stack (prefix match, any case)."""
+    return " ".join(actor.split()).lower().startswith(SELF_ACTORS)
+
+
 @dataclass(frozen=True)
 class Authorization:
     """WHO authorized WHAT, on WHICH subject, for WHICH operation.
@@ -64,7 +75,7 @@ def grant(
     scope: str,
     reason: str,
 ) -> Authorization:
-    if not actor.strip() or actor.strip().lower() in {"warden", "self", "unknown"}:
+    if not actor.strip() or " ".join(actor.split()).lower() in {"warden", "the warden", "self", "unknown"}:
         raise Unauthorized(
             "Warden cannot authorize its own write. Actor must be a human "
             "or an external governing process, not 'warden' / 'self' / 'unknown'."

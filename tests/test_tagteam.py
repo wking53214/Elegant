@@ -82,14 +82,15 @@ def test_a_cycle_that_breaks_the_suite_is_put_back_and_stops_the_loop(tmp_path: 
     assert _read(tmp_path, "pkg/__init__.py") == "VALUE = 1\n"
 
 
-def test_a_finisher_that_breaks_the_suite_is_put_back_but_the_loop_result_stands(tmp_path: Path):
+def test_a_finisher_that_breaks_the_suite_is_put_back_and_so_is_the_unfinished_loop_result(tmp_path: Path):
     _tree(tmp_path)
     breaking = FakeFinisher(path="pkg/__init__.py", new_text="VALUE = 2\n")
     result = TagTeam(drafter=FakeDrafter(steps=("kept\n",)), finisher=breaking).run(
         tmp_path, findings=[], authorization=_auth(tmp_path))
     assert result.decision == "FINISH_REJECTED" and result.converged and not result.finished
     assert _read(tmp_path, "pkg/__init__.py") == "VALUE = 1\n"
-    assert _read(tmp_path, "NOTE.md") == "kept\n"
+    # A rejected finish is not an accepted run, so the loop's edit is put back too (it used to stand).
+    assert _read(tmp_path, "NOTE.md") == "old note\n" and result.put_back
 
 
 def test_the_finisher_is_handed_the_measured_facts(tmp_path: Path):

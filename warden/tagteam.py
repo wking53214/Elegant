@@ -26,15 +26,17 @@ from __future__ import annotations
 
 import hashlib
 import sys
-from dataclasses import dataclass, field
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, Optional, Sequence
 
-from .authorization import Authorization, Unauthorized
+from . import runstate, textio
+from .authorization import Authorization, Unauthorized, is_stack_actor
 from .deletion import commented_variant, is_deletion, keep_variant, stamp_now
 from .ghost import defects_from_ghost, scan as ghost_scan
-from .guard import SeatBrokeCharter, Snapshot, is_protected, violation, watch
-from .models import Defect, FileEdit, Transformation, TransformationStatus
+from .guard import FORBIDDEN_DIRS, SeatBrokeCharter, Snapshot, is_protected, violation, watch
+from .models import Defect, FileEdit, Transformation, TransformationStatus, safe_id
 from .roles import Evidence, Facts, Finisher, Drafter, Judge, Verdict
 from .suite import SuiteRun, preserved, run_suite
 from .swizzle import assay_score, governor_attacks, swizzle_proofs_hold
@@ -42,8 +44,25 @@ from .swizzle import assay_score, governor_attacks, swizzle_proofs_hold
 DEFAULT_MAX_CYCLES = 10
 
 
+PUT_BACK_NOTE = "The tree was put back as it was found because the run did not finish accepted."
+SOURCE_CHANGED_NOTE = "the test suite changed source files, so its result cannot be trusted"
+_ENDS_ACCEPTED = {"ACCEPT", "ACCEPT_UNVERIFIED"}
+
+
 class GhostUnavailable(RuntimeError):
     """Ghost could not be run or its output could not be read. UNKNOWN, not zero findings."""
+
+
+class SuiteChangedSource(RuntimeError):
+    """Running the target's suite changed its source files."""
+
+
+class WrongAnswer(RuntimeError):
+    """A seat returned the wrong kind of thing."""
+
+    def __init__(self, seat: str, got: object, wanted: str) -> None:
+        super().__init__(f"{seat} returned {type(got).__name__} instead of {wanted}")
+        self.seat = seat
 
 
 @dataclass
@@ -67,7 +86,8 @@ class TagTeamResult:
     reobserved: tuple[Defect, ...]
     cycles: tuple[Cycle, ...]
     converged: bool
-    #: ACCEPT / FINISH_REJECTED / NOT_CONVERGED / REJECT / REFUSED / INCONCLUSIVE
+    #: ACCEPT / ACCEPT_UNVERIFIED / FINISH_REJECTED / JUDGE_REJECTED / NOT_CONVERGED / REJECT /
+    #: REFUSED / INCONCLUSIVE / ERROR (a seat failed or misbehaved)
     decision: str
     notes: tuple[str, ...]
     finish: Optional[Transformation] = None
@@ -78,6 +98,8 @@ class TagTeamResult:
     unmeasured: tuple[str, ...] = ()
     #: What the Judge said, when one was seated.
     verdict: Optional[Verdict] = None
+    #: True when edits had been made and the whole tree was restored because the run did not end accepted.
+    put_back: bool = False
 
     @property
     def suite_before(self) -> Optional[SuiteRun]:
@@ -91,7 +113,7 @@ class TagTeamResult:
 
     @property
     def applied(self) -> bool:
-        return any(c.applied for c in self.cycles) or self.finished
+        return (any(c.applied for c in self.cycles) or self.finished) and not self.put_back
 
 
 class TagTeam:
@@ -136,14 +158,85 @@ class TagTeam:
         self._trail: list[Cycle] = []
         self._assay_state: Optional[bool] = None
         self._assay: dict = {}
-        try:
-            return self._run(target, authorization, findings, python or sys.executable)
-        except (SeatBrokeCharter, GhostUnavailable) as err:
-            decision = "REJECT" if isinstance(err, SeatBrokeCharter) else "INCONCLUSIVE"
+        self._start: Optional[Snapshot] = None
+        self._seat = "Warden"
+        lock = runstate.TargetLock(target)
+        if not lock.acquire():
             return TagTeamResult(
-                target=str(target), baseline="", observed=(), reobserved=(),
-                cycles=tuple(self._trail), converged=False, decision=decision,
-                notes=tuple(self._notes + [str(err)]), unmeasured=self._unmeasured(None))
+                target=str(target), baseline="", observed=(), reobserved=(), cycles=(),
+                converged=False, decision="INCONCLUSIVE", notes=(runstate.BUSY_NOTE + ". Nothing was changed.",),
+                unmeasured=self._unmeasured(None))
+        try:
+            recovered = runstate.recover(target)
+            if recovered:
+                self._notes.append(recovered)
+            try:
+                # Always taken: a run that does not end accepted puts the tree back to this.
+                self._start = Snapshot(target)
+                result = self._run(target, authorization, findings, python or sys.executable)
+            except Exception as err:  # noqa: BLE001 - any failure ends the run with the tree put back
+                result = self._failed(target, err)
+            except KeyboardInterrupt:
+                self._settle(target, self._failed(target, RuntimeError("interrupted")))
+                raise
+            return self._settle(target, result)
+        finally:
+            lock.release()
+
+    def _failed(self, target: Path, err: BaseException) -> TagTeamResult:
+        """The result for a run that stopped on an error. Never carries a traceback."""
+        if isinstance(err, SeatBrokeCharter):
+            decision, said = "REJECT", str(err)
+        elif isinstance(err, GhostUnavailable):
+            decision, said = "INCONCLUSIVE", str(err)
+        elif isinstance(err, SuiteChangedSource):
+            decision, said = "INCONCLUSIVE", f"The run stopped: {SOURCE_CHANGED_NOTE}."
+        else:
+            seat = getattr(err, "seat", None) or self._seat
+            if isinstance(err, WrongAnswer):
+                said = f"{seat} gave a wrong kind of answer ({type(err).__name__}): {err}. The run was stopped."
+            else:
+                said = (f"{seat} failed with {type(err).__name__}. The run was stopped and nothing "
+                        "was approved.")
+            decision = "ERROR"
+        return TagTeamResult(
+            target=str(target), baseline="", observed=(), reobserved=(),
+            cycles=tuple(self._trail), converged=False, decision=decision,
+            notes=tuple(self._notes + [said]), unmeasured=self._unmeasured(None))
+
+    def _settle(self, target: Path, result: TagTeamResult) -> TagTeamResult:
+        """A run that does not end accepted leaves the tree as it was found."""
+        start = self._start
+        if result.decision in _ENDS_ACCEPTED or result.decision == "JUDGE_REJECTED" or start is None:
+            return result
+        try:
+            changed = start.changes()
+        except OSError:
+            changed = ["unknown"]
+        if not changed:
+            return result
+        if not start.restorable:
+            warning = ("WARNING: the tree is too large to restore automatically, so this run's changes "
+                       "were NOT put back and are still on disk.")
+            return replace(result, notes=result.notes[:-1] + (result.notes[-1] + " Changes were NOT undone.",
+                                                              warning) if result.notes else (warning,))
+        try:
+            start.restore()
+            left = start.changes()
+        except OSError as exc:
+            left = [f"could not restore ({type(exc).__name__})"]
+        if left:
+            warning = ("WARNING: putting the tree back did not fully work; still different: "
+                       + ", ".join(left[:5]) + ".")
+            return replace(result, notes=result.notes + (warning,))
+        return replace(result, notes=result.notes + (PUT_BACK_NOTE,), put_back=True)
+
+    @contextmanager
+    def _seated(self, who: str):
+        """Name the seat in control, so an unexpected error can say whose it was."""
+        self._seat = who
+        yield
+        self._seat = "Warden"  # not reached on an error, so the handler can still name the seat
 
     def _judge(self, target, authorization, cycles, first, current, finish, finished, sound,
                declined, python, notes, start):
@@ -163,7 +256,7 @@ class TagTeam:
             notes.append("SWIZZLE attacks on the governor: "
                          + ("not run" if attacks is None else
                             f"{sum(a['status'] == 'violated' for a in attacks)} of {len(attacks)} violated"))
-        suite_after = self._suite(target, python, notes, "final state, for the Judge")
+        suite_after = self._suite(target, python, notes, "final state, for the Judge")  # may stop the run
         first_suite = next((c.suite_before for c in cycles if c.suite_before is not None), None)
         ghost = self.ghost_tools_root is not None
         evidence = Evidence(
@@ -177,14 +270,18 @@ class TagTeam:
             unmeasured=self._unmeasured(sound), notes=tuple(notes),
             assay=({**self._assay, "floor": self.assay_floor} if self._assay_state else None))
         try:
-            with watch(target, "The Judge"):
+            with self._seated("The Judge"), watch(target, "The Judge"):
                 verdict = self.judge.decide(evidence)
         except SeatBrokeCharter:
             raise
         except Exception as err:  # noqa: BLE001 - a judge that fails has not approved anything
             notes.append(f"The Judge failed ({type(err).__name__}); nothing was approved.")
             return "ACCEPT_UNVERIFIED", None, " The Judge failed, so this is not approved."
-        said = "; ".join(verdict.reasons) or "no reasons given"
+        reasons = getattr(verdict, "reasons", None)
+        if not isinstance(getattr(verdict, "decision", None), str) or not isinstance(reasons, (tuple, list)) \
+                or not all(isinstance(r, str) for r in reasons):
+            raise WrongAnswer("The Judge", verdict, "a verdict")
+        said = "; ".join(reasons) or "no reasons given"
         if verdict.decision == "ACCEPT":
             return "ACCEPT", verdict, f" Judge: ACCEPT ({said})."
         if verdict.decision == "REJECT":
@@ -219,7 +316,7 @@ class TagTeam:
         observed = self._observe(target, findings, python, notes)
         first = observed
         base0 = _fingerprint(target)
-        start = Snapshot(target) if self.judge is not None else None
+        start = self._start
         declined: set[str] = set()
 
         def stop(decision: str, why: str, cycles=(), converged=False, current=None,
@@ -250,8 +347,8 @@ class TagTeam:
             return stop("INCONCLUSIVE", "No drafter. Tag team observed only; nothing can be proposed.")
         if authorization is None or not authorization.granted:
             # Show what would be proposed, change nothing.
-            with watch(target, "The Drafter"):
-                proposal = self.drafter.propose(target, observed, _fingerprint(target))
+            with self._seated("The Drafter"), watch(target, "The Drafter"):
+                proposal = _expect(self.drafter.propose(target, observed, _fingerprint(target)), "The Drafter")
             cycle = Cycle(1, len(observed), proposal, False, "REFUSED")
             return stop("REFUSED", "Human authorization missing. Proposal stands. No write.",
                         cycles=[cycle])
@@ -267,8 +364,8 @@ class TagTeam:
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
             offered = tuple(d for d in observed if d.identity not in declined)
-            with watch(target, "The Drafter"):
-                proposal = self.drafter.propose(target, offered, baseline)
+            with self._seated("The Drafter"), watch(target, "The Drafter"):
+                proposal = _expect(self.drafter.propose(target, offered, baseline), "The Drafter")
             if proposal is None or not proposal.edits:
                 cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
                 converged = True
@@ -320,13 +417,13 @@ class TagTeam:
                 cycle.applied, cycle.outcome = False, "DECLINED"
                 declined.update(d.identity for d in proposal.known_defects)
                 notes.append(f"Cycle {number}: comment-out test failed. The change produced new Ghost "
-                             f"finding(s) {sorted(new)}; it was put back and the code left as it is.")
+                             f"finding(s) {sorted(map(safe_id, new))}; it was put back and the code left as it is.")
                 continue
             observed = after
         if not converged:
             return stop("NOT_CONVERGED", f"No convergence in {self.max_cycles} cycles.", cycles)
         if declined:
-            notes.append(f"Removals declined and left in place: {sorted(declined)}.")
+            notes.append(f"Removals declined and left in place: {sorted(map(safe_id, declined))}.")
         if observed and self.ghost_tools_root is not None:
             notes.append(f"Drafter is out of proposals but Ghost still reports {len(observed)} finding(s). "
                          "Converged means no proposals left, not zero findings.")
@@ -341,8 +438,8 @@ class TagTeam:
         facts = Facts(suite=self._suite(target, python, notes, "converged"),
                       remaining=observed, cycles=len([c for c in cycles if c.applied]),
                       unmeasured=self._unmeasured(end_sound))
-        with watch(target, "The Finisher"):
-            finish = self.finisher.finish(target, _fingerprint(target), facts)
+        with self._seated("The Finisher"), watch(target, "The Finisher"):
+            finish = _expect(self.finisher.finish(target, _fingerprint(target), facts), "The Finisher")
         if finish is None or not finish.edits:
             return stop("ACCEPT", "Loop converged. The Finisher had nothing to finish.",
                         cycles, converged=True)
@@ -360,7 +457,7 @@ class TagTeam:
         if new:
             _restore(target, done.restore)
             finish.status = TransformationStatus.REJECTED
-            return stop("FINISH_REJECTED", f"Finishing introduced new Ghost finding(s) {sorted(new)}. "
+            return stop("FINISH_REJECTED", f"Finishing introduced new Ghost finding(s) {sorted(map(safe_id, new))}. "
                         "The finishing change was put back.", cycles, converged=True,
                         current=observed, finish=finish)
         return stop("ACCEPT", "Loop converged and the finishing change stands.", cycles,
@@ -392,13 +489,19 @@ class TagTeam:
         before = self._suite(target, python, notes, f"cycle {number} keep test baseline")
         if before is None or not before.green:
             return "systemic", "The suite is not green."
-        snapshot = {rel: (target / rel).read_text(encoding="utf-8") for rel in variant}
+        if before.skipped or before.xfailed:
+            return "candidate", (f"some tests did not run ({before.skipped} skipped, {before.xfailed} "
+                                 "xfailed), so the suite cannot prove this code is unused")
+        snapshot: Dict[str, Optional[bytes]] = {rel: (target / rel).read_bytes() for rel in variant}
+        # Saved outside the target first, so a kill during the trap cannot leave the trap behind.
+        runstate.write_journal(target, snapshot)
         try:
             for rel, text in variant.items():
-                (target / rel).write_text(text, encoding="utf-8")
+                textio.write_text(target / rel, text)
             trapped = self._suite(target, python, notes, f"cycle {number} keep test (code made to fail)")
         finally:
             _restore(target, snapshot)
+            runstate.clear_journal(target)
         if trapped is None or preserved(before, trapped) is not None:
             notes.append(f"Cycle {number}: keep test FAILED. The suite noticed when the code broke, "
                          "so something uses it.")
@@ -419,9 +522,19 @@ class TagTeam:
             return _Applied(number, seen, proposal, False, "SUITE_RED", before, None, {})
         snapshot = _snapshot(target, proposal)
         proposal.authorize(auth)
-        proposal.apply(target)
+        try:
+            proposal.apply(target)
+        except (ValueError, OSError, Unauthorized) as err:  # includes a file that is not UTF-8
+            _restore(target, snapshot)
+            proposal.status = TransformationStatus.REJECTED
+            notes.append(f"Cycle {number}: the change could not be applied ({err}); it was put back.")
+            return _Applied(number, seen, proposal, False, "PUT_BACK", before, None, snapshot)
         notes.append(f"Cycle {number}: transformation applied under granted authorization.")
-        after = self._suite(target, python, notes, f"cycle {number} after")
+        try:
+            after = self._suite(target, python, notes, f"cycle {number} after")
+        except SuiteChangedSource:
+            _restore(target, snapshot)
+            raise
         broken = preserved(before, after) if before is not None else None
         if broken is not None:
             _restore(target, snapshot)
@@ -455,13 +568,13 @@ class TagTeam:
     def _observe(self, target: Path, findings: Optional[Sequence[dict]], python: str,
                  notes: list[str]) -> tuple[Defect, ...]:
         if findings is not None:
-            observed = defects_from_ghost(findings)
+            observed = _defects(findings)
             notes.append(f"Ghost Tools findings loaded ({len(observed)}), not scanned in this process.")
             return observed
         if self.ghost_tools_root is None:
             notes.append("Ghost Tools scan SKIPPED: no ghost_tools_root. Observation is UNKNOWN.")
             return ()
-        observed = defects_from_ghost(self._scan(target, python))
+        observed = _defects(self._scan(target, python))
         notes.append(f"Ghost Tools observed {len(observed)} finding(s).")
         return observed
 
@@ -482,25 +595,30 @@ class TagTeam:
             if when.endswith("before"):
                 notes.append("Rule 7 NOT RUN: run_tests=False. Behavior preservation is unmeasured.")
             return None
+        source_before = _source_hash(target)
         result = run_suite(target, python)
         notes.append(f"Rule 7 suite {when}: {result.describe()}.")
+        if _source_hash(target) != source_before:
+            notes.append(f"Rule 7: {SOURCE_CHANGED_NOTE}.")
+            raise SuiteChangedSource(SOURCE_CHANGED_NOTE)
         return result
 
     def _reinspect(self, target: Path, observed: tuple[Defect, ...], python: str,
                    notes: list[str]) -> tuple[Defect, ...]:
         if self.ghost_tools_root is None:
             return observed
-        reobserved = defects_from_ghost(self._scan(target, python))
+        reobserved = _defects(self._scan(target, python))
         before_ids = {d.ghost_id for d in observed if d.ghost_id}
         after_ids = {d.ghost_id for d in reobserved if d.ghost_id}
         notes.append(f"Ghost re-inspected: {len(reobserved)} finding(s); "
-                     f"closed={sorted(before_ids - after_ids)} new={sorted(after_ids - before_ids)}")
+                     f"closed={sorted(map(safe_id, before_ids - after_ids))} "
+                     f"new={sorted(map(safe_id, after_ids - before_ids))}")
         return reobserved
 
 
 @dataclass
 class _Applied(Cycle):
-    restore: Dict[str, Optional[str]] = field(default_factory=dict)
+    restore: Dict[str, Optional[bytes]] = field(default_factory=dict)
 
     def __init__(self, number, observed, proposal, applied, outcome, before, after, restore):
         super().__init__(number, observed, proposal, applied, outcome, before, after)
@@ -513,7 +631,7 @@ def _commented(target: Path, proposal: Transformation) -> Optional[Transformatio
     if files is None:
         return None
     proposal.edits = tuple(FileEdit(path=rel, kind="write", new=text,
-                                    old=(target / rel).read_text(encoding="utf-8"))
+                                    old=textio.read_text(target / rel))
                            for rel, text in files.items())
     proposal.intent = "comment out unused code (not deleted): " + proposal.intent
     return proposal
@@ -534,6 +652,34 @@ def _edits_key(proposal: Transformation) -> str:
     return hashlib.sha256(repr([(e.path, e.kind, e.old, e.new) for e in proposal.edits]).encode()).hexdigest()
 
 
+def _expect(value, seat: str):
+    """A Transformation, or None. Anything else is a seat giving the wrong kind of answer."""
+    if value is not None and not isinstance(value, Transformation):
+        raise WrongAnswer(seat, value, "a proposal")
+    return value
+
+
+def _defects(findings) -> tuple[Defect, ...]:
+    try:
+        return defects_from_ghost(findings)
+    except (AttributeError, TypeError, ValueError) as err:
+        raise GhostUnavailable(f"Ghost's findings could not be read ({type(err).__name__}). "
+                               "Observation is UNKNOWN; nothing further was attempted.") from err
+
+
+def _source_hash(target: Path) -> str:
+    """A hash of the target's non-test Python files, to notice a suite that rewrites source."""
+    digest = hashlib.sha256()
+    for path in sorted(Path(target).rglob("*.py")):
+        rel = path.relative_to(target)
+        if FORBIDDEN_DIRS.intersection(p.lower() for p in rel.parts) or is_protected(rel.as_posix()):
+            continue
+        if path.is_file():
+            digest.update(rel.as_posix().encode("utf-8", "replace"))
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def _is_warden(target: Path) -> bool:
     """Warden's own tree, recognised by what it contains and not by what the folder is called."""
     return (target / "warden" / "authorization.py").is_file()
@@ -543,26 +689,26 @@ def _refuse_self_authorization(target: Path, authorization: Optional[Authorizati
     """Warden may transform other repos. Transforming itself under its own
     proposal is the self-certifying loop. Checked on the contents of the target
     and on the actor, wherever the folder lives and whatever it is called."""
-    if authorization and authorization.granted and authorization.actor.strip().lower() in {"warden", "self", "unknown", ""}:
+    if authorization and authorization.granted and authorization.actor.strip().lower() in {"warden", "the warden", "self", "unknown", ""}:
         raise Unauthorized(f"{authorization.actor!r} cannot authorize a write; a human or external governor must.")
-    if authorization and authorization.granted and _is_warden(target) \
-            and authorization.actor.strip().lower().startswith(("warden", "drafter", "burnish", "ghost", "swizzle", "assay")):
+    if authorization and authorization.granted and _is_warden(target) and is_stack_actor(authorization.actor):
         raise Unauthorized("Warden cannot authorize work on itself.")
 
 
-def _snapshot(target: Path, proposal: Transformation) -> Dict[str, Optional[str]]:
-    """Each file the proposal touches, as it is now (None: it does not exist yet)."""
-    out: Dict[str, Optional[str]] = {}
+def _snapshot(target: Path, proposal: Transformation) -> Dict[str, Optional[bytes]]:
+    """Each file the proposal touches, byte for byte as it is now (None: it does not exist yet)."""
+    out: Dict[str, Optional[bytes]] = {}
     for edit in proposal.edits:
         path = target / edit.path
-        out[edit.path] = path.read_text(encoding="utf-8") if path.is_file() else None
+        out[edit.path] = path.read_bytes() if path.is_file() else None
     return out
 
 
-def _restore(target: Path, snapshot: Dict[str, Optional[str]]) -> None:
-    for rel, text in snapshot.items():
+def _restore(target: Path, snapshot: Dict[str, Optional[bytes]]) -> None:
+    for rel, data in snapshot.items():
         path = target / rel
-        if text is None:
+        if data is None:
             path.unlink(missing_ok=True)
         else:
-            path.write_text(text, encoding="utf-8")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)

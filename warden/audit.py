@@ -26,7 +26,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Sequence
 
-from .models import DefectSeverity, ghost_severity_to_warden
+from .models import DefectSeverity, ghost_severity_to_warden, safe_id
 
 FILENAME = "WARDEN_AUDIT.md"
 BEGIN = "<!-- warden:defects -->"
@@ -88,9 +88,13 @@ def existing_rows(text: str) -> List[Row]:
     return [Row(**{k: v.strip() for k, v in m.groupdict().items()}) for m in _ROW.finditer(text)]
 
 
+def has_markers(text: str) -> bool:
+    return BEGIN in text and END in text and text.index(BEGIN) < text.index(END)
+
+
 def update(existing_text: str, findings: Sequence[Mapping]) -> str:
     """The audit file with its defect table brought up to date."""
-    text = existing_text if BEGIN in existing_text and END in existing_text else (
+    text = existing_text if has_markers(existing_text) else (
         _SKELETON.format(begin=BEGIN, end=END))
     rows = existing_rows(text[text.index(BEGIN):text.index(END)])
     by_ghost: Dict[str, Row] = {r.ghost: r for r in rows if r.ghost}
@@ -100,7 +104,7 @@ def update(existing_text: str, findings: Sequence[Mapping]) -> str:
 
     seen = set()
     for f in findings:
-        ghost = str(f.get("id") or "")
+        ghost = safe_id(f.get("id") or "") if f.get("id") else ""
         if not ghost or ghost in seen:
             continue
         seen.add(ghost)

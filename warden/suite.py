@@ -50,6 +50,9 @@ class SuiteRun:
     errors: int = 0
     skipped: int = 0
     reason: str = ""
+    #: Tests marked as expected to fail that did fail, and ones that passed anyway.
+    xfailed: int = 0
+    xpassed: int = 0
 
     @property
     def green(self) -> bool:
@@ -59,7 +62,7 @@ class SuiteRun:
         if not self.ran:
             return f"did not run ({self.reason})"
         return (f"{self.passed} passed, {self.failed} failed, {self.errors} errors, "
-                f"{self.skipped} skipped")
+                f"{self.skipped} skipped, {self.xfailed} xfailed, {self.xpassed} xpassed")
 
 
 def run_suite(target: Path, python: str, timeout: float = 900.0) -> SuiteRun:
@@ -92,7 +95,8 @@ def run_suite(target: Path, python: str, timeout: float = 900.0) -> SuiteRun:
                   or [f"exit {done.returncode}"])[-1]
         return SuiteRun(ran=False, reason=f"no pytest summary ({reason[:200]})")
     return SuiteRun(ran=True, passed=counts.get("passed", 0), failed=counts.get("failed", 0),
-                    errors=counts.get("errors", 0), skipped=counts.get("skipped", 0))
+                    errors=counts.get("errors", 0), skipped=counts.get("skipped", 0),
+                    xfailed=counts.get("xfailed", 0), xpassed=counts.get("xpassed", 0))
 
 
 def preserved(before: SuiteRun, after: SuiteRun) -> Optional[str]:

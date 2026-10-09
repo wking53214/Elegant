@@ -10,6 +10,7 @@ default actor.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import json
 import sys
@@ -17,7 +18,7 @@ from pathlib import Path
 
 from . import __version__
 from .authorization import Unauthorized, grant
-from . import audit as audit_file
+from . import audit as audit_file, textio
 from .ghost import load_findings, scan as ghost_scan
 from .tagteam import TagTeam
 
@@ -63,8 +64,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "audit":
         return _audit(args)
     if args.command == "tagteam":
-        return _tagteam(args)
+        try:
+            return _tagteam(args)
+        except Unauthorized as e:
+            _print_json({"decision": "REFUSED", "notes": [str(e)]})
+            print(f"warden: {e}", file=sys.stderr)
+            return 2
+        except Exception as e:  # noqa: BLE001 - the CLI always prints valid JSON, never a traceback
+            _print_json({"decision": "ERROR",
+                         "notes": [f"Warden failed with {type(e).__name__}. Nothing was approved."]})
+            return 4
     return 2
+
+
+def _print_json(payload) -> None:
+    print(json.dumps(payload, indent=2))
 
 
 def _tagteam(args) -> int:
@@ -79,22 +93,31 @@ def _tagteam(args) -> int:
             print(f"warden: {e}", file=sys.stderr)
             return 2
     try:
-        drafter = _load_seat(args.drafter)
-        finisher = _load_seat(args.finisher)
-        judge = _load_seat(args.judge)
-    except (ImportError, AttributeError, ValueError) as e:
+        with contextlib.redirect_stdout(sys.stderr):
+            drafter = _load_seat(args.drafter)
+            finisher = _load_seat(args.finisher)
+            judge = _load_seat(args.judge)
+    except Exception as e:  # noqa: BLE001 - a seat that will not load is named, never a traceback
         print(f"warden: cannot load seat: {e}", file=sys.stderr)
+        _print_json({"decision": "ERROR", "notes": [f"A seat could not be loaded ({type(e).__name__})."]})
         return 2
+    return _run_team(args, auth, findings, drafter, finisher, judge)
+
+
+def _run_team(args, auth, findings, drafter, finisher, judge) -> int:
     team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
                    assay_root=args.assay_root, assay_floor=args.assay_floor,
                    drafter=drafter, finisher=finisher, judge=judge, max_cycles=args.max_cycles)
-    result = team.run(args.path, authorization=auth, findings=findings)
+    # A seat that print()s must not corrupt the JSON on stdout.
+    with contextlib.redirect_stdout(sys.stderr):
+        result = team.run(args.path, authorization=auth, findings=findings)
     payload = {
         "decision": result.decision,
         "converged": result.converged,
         "cycles": [{"number": c.number, "outcome": c.outcome, "observed": c.observed}
                    for c in result.cycles],
         "finished": result.finished,
+        "put_back": result.put_back,
         "notes": list(result.notes),
         "observed": [d.identity for d in result.observed],
         "reobserved": [d.identity for d in result.reobserved],
@@ -104,11 +127,12 @@ def _tagteam(args) -> int:
             "decision": result.verdict.decision, "reasons": list(result.verdict.reasons),
             "judge": result.verdict.judge},
     }
-    print(json.dumps(payload, indent=2))
+    _print_json(payload)
     if result.swizzle_sound is False:
         print("warden: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
         return 2
-    return {"ACCEPT": 0, "INCONCLUSIVE": 0, "REFUSED": 0, "ACCEPT_UNVERIFIED": 3}.get(result.decision, 1)
+    return {"ACCEPT": 0, "INCONCLUSIVE": 0, "REFUSED": 0, "ACCEPT_UNVERIFIED": 3,
+            "ERROR": 4}.get(result.decision, 1)
 
 
 def _load_seat(spec):
@@ -133,17 +157,30 @@ def _audit(args) -> int:
               "would read as a clean repository", file=sys.stderr)
         return 2
     path = root / audit_file.FILENAME
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if path.is_symlink() or not path.resolve().is_relative_to(root):
+        print(f"warden: {path} is a link or points outside the target; the audit will not be read "
+              "or written through it.", file=sys.stderr)
+        return 2
+    try:
+        current = textio.read_text(path) if path.is_file() else ""
+    except textio.Undecodable:
+        print(f"warden: {path} is not valid UTF-8, so it will not be touched.", file=sys.stderr)
+        return 2
     updated = audit_file.update(current, findings)
     if not args.authorize:
         print(updated)
         return 0
+    if current.strip() and not audit_file.has_markers(current):
+        print(f"warden: {path} exists, has no Warden markers ({audit_file.BEGIN} and {audit_file.END}), "
+              "and looks hand-written. It was not changed. Add the two markers where the table should go, "
+              "or move the file aside.", file=sys.stderr)
+        return 2
     try:
         auth = grant(args.authorize, "audit", str(root), "documentation", args.reason)
     except Unauthorized as e:
         print(f"warden: {e}", file=sys.stderr)
         return 2
-    path.write_text(updated, encoding="utf-8")
+    textio.write_text(path, updated)
     print(f"wrote {path} (authorized by {auth.actor})")
     return 0
 

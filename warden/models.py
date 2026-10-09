@@ -13,10 +13,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+import re
 from typing import Any, Mapping, Optional, Sequence
 
+from . import textio
 from .authorization import Authorization, Unauthorized
 from .epistemic import EpistemicState
+
+_UNSAFE_ID = re.compile(r"[^A-Za-z0-9_.:-]")
+
+
+def safe_id(value: object) -> str:
+    """A Ghost id made safe to write into a file or a note.
+
+    Only letters, digits and _ . : - survive; everything else, newlines
+    included, becomes "?". One line, at most 64 characters. An id is data from
+    outside Warden, and a newline in one could otherwise put live code in a file.
+    """
+    return _UNSAFE_ID.sub("?", str(value))[:64]
 
 
 class DefectSeverity(str, Enum):
@@ -161,22 +175,25 @@ class Transformation:
             if edit.kind == "replace":
                 if not path.is_file():
                     raise FileNotFoundError(edit.path)
-                original = path.read_text(encoding="utf-8")
-                if edit.old not in original:
+                original = textio.read_text(path, edit.path)
+                old, new_text = (edit.old, edit.new) if "\r" in original else (_lf(edit.old), _lf(edit.new))
+                if old not in original:
                     raise ValueError(
                         f"{edit.path}: preservation check failed; expected text not found. "
                         "The baseline has drifted; this transformation must be re-proposed."
                     )
-                if original.count(edit.old) != 1 and not edit.replace_all:
+                if original.count(old) != 1 and not edit.replace_all:
                     raise ValueError(
-                        f"{edit.path}: expected text occurs {original.count(edit.old)} times; "
+                        f"{edit.path}: expected text occurs {original.count(old)} times; "
                         "refusing an ambiguous replace (one intentional change)."
                     )
-                new = original.replace(edit.old, edit.new) if edit.replace_all else original.replace(edit.old, edit.new, 1)
-                path.write_text(new, encoding="utf-8")
+                new = original.replace(old, new_text) if edit.replace_all else original.replace(old, new_text, 1)
+                textio.write_text(path, new)
             elif edit.kind == "write":
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(edit.new, encoding="utf-8")
+                if path.is_file() and not textio.is_decodable(path):
+                    raise textio.Undecodable(f"{edit.path} is not valid UTF-8, so it will not be edited")
+                textio.write_text(path, edit.new)
             elif edit.kind == "delete":
                 if not path.is_file():
                     raise FileNotFoundError(edit.path)
@@ -230,6 +247,10 @@ class Transformation:
             },
             "result": self.result,
         }
+
+
+def _lf(text: str) -> str:
+    return text.replace("\r\n", "\n")
 
 
 @dataclass(frozen=True)

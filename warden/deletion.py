@@ -31,7 +31,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-from .models import Transformation
+from . import textio
+from .models import Transformation, safe_id
 
 _PROSE = {".md", ".rst", ".txt"}
 _MESSAGE = "warden keep-test: this code is a deletion candidate and was still executed"
@@ -53,7 +54,7 @@ def is_deletion(target: Path, proposal: Transformation) -> bool:
             return True
         if edit.kind == "write":
             path = target / edit.path
-            if path.is_file() and _lines(path.read_text(encoding="utf-8")) > _lines(edit.new):
+            if path.is_file() and _lines(textio.read_text(path)) > _lines(edit.new):
                 return True
     return False
 
@@ -111,7 +112,7 @@ def removal_plan(target: Path, proposal: Transformation) -> Optional[Dict[str, O
                 return None
             plan[edit.path] = gone
         elif edit.kind == "write" and path.is_file():
-            original = path.read_text(encoding="utf-8")
+            original = textio.read_text(path)
             if _lines(original) > _lines(edit.new):
                 gone = _removed_names(original, edit.new)
                 if not gone or path.suffix != ".py":
@@ -127,7 +128,7 @@ def keep_variant(target: Path, proposal: Transformation) -> Optional[Dict[str, s
         return None
     out: Dict[str, str] = {}
     for rel, names in plan.items():
-        original = (Path(target) / rel).read_text(encoding="utf-8")
+        original = textio.read_text(Path(target) / rel)
         trapped = _boobytrap(original, names)
         if trapped is None:
             if names is not None:
@@ -149,11 +150,11 @@ def commented_variant(target: Path, proposal: Transformation, stamp: str) -> Opt
     plan = removal_plan(target, proposal)
     if plan is None:
         return None
-    ids = ", ".join(d.ghost_id for d in proposal.known_defects if d.ghost_id) or "no finding id"
+    ids = ", ".join(safe_id(d.ghost_id) for d in proposal.known_defects if d.ghost_id) or "no finding id"
     header = f"# WARDEN COMMENTED OUT {stamp} | {ids} | passed keep test and delete test"
     out: Dict[str, str] = {}
     for rel, names in plan.items():
-        original = (Path(target) / rel).read_text(encoding="utf-8")
+        original = textio.read_text(Path(target) / rel)
         lines = original.splitlines()
         if names is None:
             spans = [(0, len(lines))]

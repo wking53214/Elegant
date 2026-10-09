@@ -11,12 +11,11 @@ elsewhere. Absence of Ghost Tools is UNKNOWN, not a clean bill of health.
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from .isolation import run_instrument
 from .models import Defect, defects_from_ghost
 
 
@@ -44,9 +43,7 @@ def scan(
     Returns the findings list. Raises FileNotFoundError if the CLI cannot
     be located. That is UNKNOWN-as-exception, not 'zero findings'.
     """
-    env = os.environ.copy()
-    if ghost_tools_root:
-        env["PYTHONPATH"] = str(ghost_tools_root) + os.pathsep + env.get("PYTHONPATH", "")
+    target = Path(target).resolve()
     cmd = [
         python,
         "-m",
@@ -61,17 +58,17 @@ def scan(
         "--no-project",
         "--no-correlate",
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
-    if proc.returncode not in (0, 1):
+    proc = run_instrument(cmd, roots=[ghost_tools_root], timeout=1800)
+    if proc.returncode not in (0, 1) or not proc.stdout.strip():
         # ghost_buster uses 1 for 'findings exist'; 2 is usage.
         raise RuntimeError(
             f"ghost_buster failed ({proc.returncode}): {proc.stderr[-800:]}"
         )
     data = json.loads(proc.stdout)
-    if isinstance(data, list):
-        return tuple(data)
     if isinstance(data, dict) and "findings" in data:
-        return tuple(data["findings"])
+        data = data["findings"]
+    if isinstance(data, list) and all(isinstance(f, dict) for f in data):
+        return tuple(data)
     raise RuntimeError("ghost_buster JSON was not a findings list")
 
 
