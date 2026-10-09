@@ -69,6 +69,8 @@ class RemovingDrafter:
         from warden.models import Defect, DefectSeverity
         target = Path(target)
         path = target / self.path
+        if self.cites and self.cites not in {d.identity for d in observed}:
+            return None
         if not path.is_file() or "WARDEN COMMENTED OUT" in path.read_text(encoding="utf-8"):
             return None
         self.calls += 1

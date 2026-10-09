@@ -7,6 +7,7 @@ import pytest
 import warden.tagteam as tagteam
 from warden.authorization import grant
 from warden.deletion import is_deletion, keep_variant
+from warden.models import defects_from_ghost
 from warden.tagteam import TagTeam
 
 from fakes import FakeDrafter, RemovingDrafter
@@ -23,6 +24,10 @@ def _repo(root: Path, tests: str = "from pkg import VALUE\n\ndef test_value():\n
     (root / "tests" / "test_pkg.py").write_text(tests, encoding="utf-8")
     (root / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "0.0.1"\n',
                                           encoding="utf-8")
+
+
+def _obs():
+    return defects_from_ghost([DEAD])
 
 
 def _auth(root: Path):
@@ -80,8 +85,10 @@ def test_code_called_by_name_fails_the_keep_test_and_survives(tmp_path, ghost):
         "def pytest_sessionstart(session):\n"
         "    getattr(dead, 'unused', lambda: None)()\n", encoding="utf-8")
     result = _team().run(tmp_path, findings=[DEAD], authorization=_auth(tmp_path))
-    assert result.decision == "REJECT" and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
+    assert result.decision == "ACCEPT" and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
+    assert [c.outcome for c in result.cycles] == ["DECLINED", "NOTHING_TO_PROPOSE"]
     assert any("keep test FAILED" in n for n in result.notes)
+    assert any("declined and left in place" in n for n in result.notes)
 
 
 def test_the_keep_test_always_restores_the_files(tmp_path, ghost):
@@ -102,7 +109,7 @@ def test_a_removal_that_adds_ghost_findings_is_put_back(tmp_path, ghost, monkeyp
 
     monkeypatch.setattr(tagteam, "ghost_scan", scan)
     result = _team().run(tmp_path, findings=[DEAD], authorization=_auth(tmp_path))
-    assert result.decision == "REJECT" and _dead(tmp_path).exists()
+    assert result.decision == "ACCEPT" and _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY
     assert any("comment-out test failed" in n for n in result.notes)
 
 
@@ -128,13 +135,13 @@ def test_a_removal_is_not_applied_when_swizzle_proofs_fail(tmp_path, ghost, monk
 def test_a_removal_citing_no_ghost_finding_is_refused(tmp_path, ghost):
     _repo(tmp_path)
     result = TagTeam(drafter=RemovingDrafter(cites=""), ghost_tools_root=Path(".")).run(
-        tmp_path, findings=[DEAD], authorization=_auth(tmp_path))
-    assert result.decision == "REJECT" and _dead(tmp_path).exists()
+        tmp_path, findings=[DEAD], authorization=_auth(tmp_path), )
+    assert _dead(tmp_path).read_text(encoding="utf-8") == DEAD_PY and not result.applied
 
 
 def test_the_applier_refuses_a_removal_that_skipped_the_tests(tmp_path):
     _repo(tmp_path)
-    proposal = RemovingDrafter().propose(tmp_path, (), "b")
+    proposal = RemovingDrafter().propose(tmp_path, _obs(), "b")
     done = TagTeam()._apply(tmp_path, proposal, _auth(tmp_path), "python", [], 1, 0)
     assert done.outcome == "REFUSED" and _dead(tmp_path).exists()
 
@@ -142,7 +149,7 @@ def test_the_applier_refuses_a_removal_that_skipped_the_tests(tmp_path):
 def test_removed_code_that_cannot_be_made_to_fail_is_refused(tmp_path):
     _repo(tmp_path)
     (tmp_path / "data.json").write_text("{}\n", encoding="utf-8")
-    t = RemovingDrafter(path="data.json").propose(tmp_path, (), "b")
+    t = RemovingDrafter(path="data.json").propose(tmp_path, _obs(), "b")
     assert keep_variant(tmp_path, t) is None
 
 
@@ -157,7 +164,7 @@ def test_a_partial_removal_traps_only_the_removed_function(tmp_path):
 
 def test_what_counts_as_removing_code(tmp_path):
     _repo(tmp_path)
-    assert is_deletion(tmp_path, RemovingDrafter().propose(tmp_path, (), "b"))
+    assert is_deletion(tmp_path, RemovingDrafter().propose(tmp_path, _obs(), "b"))
     assert is_deletion(tmp_path, FakeDrafter(steps=("X = 1\n",), path="pkg/dead.py").propose(tmp_path, (), "b"))
     (tmp_path / "NOTE.md").write_text("a\nb\n", encoding="utf-8")
     assert not is_deletion(tmp_path, FakeDrafter(steps=("a\n",), path="NOTE.md").propose(tmp_path, (), "b"))
