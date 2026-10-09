@@ -29,7 +29,7 @@ import sys
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, Optional, Sequence
+from typing import Dict, Mapping, Optional, Sequence
 
 from . import runstate, textio
 from .authorization import Authorization, Unauthorized, is_stack_actor
@@ -42,6 +42,12 @@ from .suite import SuiteRun, preserved, run_suite
 from .swizzle import assay_score, governor_attacks, swizzle_proofs_hold
 
 DEFAULT_MAX_CYCLES = 10
+DEFAULT_GHOST_TIMEOUT = 600
+
+#: Every decision this module can produce. The CLI maps each one to an exit code and
+#: treats anything else as a failure, never as success.
+DECISIONS = ("ACCEPT", "ACCEPT_UNVERIFIED", "REJECT", "JUDGE_REJECTED", "NOT_CONVERGED",
+             "FINISH_REJECTED", "REFUSED", "INCONCLUSIVE", "ERROR")
 
 
 PUT_BACK_NOTE = "The tree was put back as it was found because the run did not finish accepted."
@@ -100,6 +106,9 @@ class TagTeamResult:
     verdict: Optional[Verdict] = None
     #: True when edits had been made and the whole tree was restored because the run did not end accepted.
     put_back: bool = False
+    #: One plain sentence saying why the run ended as it did (the same sentence as the last note
+    #: before any put-back text). Empty for a plain ACCEPT.
+    reason: str = ""
 
     @property
     def suite_before(self) -> Optional[SuiteRun]:
@@ -129,6 +138,7 @@ class TagTeam:
         judge: Optional[Judge] = None,
         max_cycles: int = DEFAULT_MAX_CYCLES,
         run_tests: bool = True,
+        ghost_timeout: float = DEFAULT_GHOST_TIMEOUT,
     ) -> None:
         self.ghost_tools_root = ghost_tools_root
         self.swizzle_root = swizzle_root
@@ -143,6 +153,8 @@ class TagTeam:
         #: Rule 7. Off only for callers that measure the suite some other way;
         #: the notes say so when it is off.
         self.run_tests = run_tests
+        #: Seconds one Ghost scan may take. A scan that takes longer counts as Ghost being unavailable.
+        self.ghost_timeout = ghost_timeout
 
     def run(
         self,
@@ -160,12 +172,16 @@ class TagTeam:
         self._assay: dict = {}
         self._start: Optional[Snapshot] = None
         self._seat = "Warden"
+        #: Instruments found to be down or unreadable during this run.
+        self._down: set[str] = set()
+        self._suite_ran = False
+        self._sound: Optional[bool] = None
         lock = runstate.TargetLock(target)
         if not lock.acquire():
             return TagTeamResult(
                 target=str(target), baseline="", observed=(), reobserved=(), cycles=(),
                 converged=False, decision="INCONCLUSIVE", notes=(runstate.BUSY_NOTE + ". Nothing was changed.",),
-                unmeasured=self._unmeasured(None))
+                unmeasured=self._unmeasured(None, never_ran=True), reason=runstate.BUSY_NOTE + ". Nothing was changed.")
         try:
             recovered = runstate.recover(target)
             if recovered:
@@ -189,8 +205,10 @@ class TagTeam:
             decision, said = "REJECT", str(err)
         elif isinstance(err, GhostUnavailable):
             decision, said = "INCONCLUSIVE", str(err)
+            self._down.add("ghost")
         elif isinstance(err, SuiteChangedSource):
             decision, said = "INCONCLUSIVE", f"The run stopped: {SOURCE_CHANGED_NOTE}."
+            self._down.add("suite")
         else:
             seat = getattr(err, "seat", None) or self._seat
             if isinstance(err, WrongAnswer):
@@ -202,7 +220,8 @@ class TagTeam:
         return TagTeamResult(
             target=str(target), baseline="", observed=(), reobserved=(),
             cycles=tuple(self._trail), converged=False, decision=decision,
-            notes=tuple(self._notes + [said]), unmeasured=self._unmeasured(None))
+            notes=tuple(self._notes + [said]), unmeasured=self._unmeasured(self._sound, never_ran=True),
+            reason=said)
 
     def _settle(self, target: Path, result: TagTeamResult) -> TagTeamResult:
         """A run that does not end accepted leaves the tree as it was found."""
@@ -252,7 +271,8 @@ class TagTeam:
         if self.swizzle_root is not None and sound is True:
             import warden
             attacks = governor_attacks(swizzle_root=self.swizzle_root,
-                                       warden_root=Path(warden.__file__).resolve().parents[1], python=python)
+                                       warden_root=Path(warden.__file__).resolve().parents[1], python=python,
+                                       note=notes)
             notes.append("SWIZZLE attacks on the governor: "
                          + ("not run" if attacks is None else
                             f"{sum(a['status'] == 'violated' for a in attacks)} of {len(attacks)} violated"))
@@ -282,6 +302,7 @@ class TagTeam:
                 or not all(isinstance(r, str) for r in reasons):
             raise WrongAnswer("The Judge", verdict, "a verdict")
         said = "; ".join(reasons) or "no reasons given"
+        self._check_verdict_shape(verdict, notes)
         if verdict.decision == "ACCEPT":
             return "ACCEPT", verdict, f" Judge: ACCEPT ({said})."
         if verdict.decision == "REJECT":
@@ -294,15 +315,31 @@ class TagTeam:
             return "JUDGE_REJECTED", verdict, f" Judge: REJECT ({said}).{undone}"
         return "ACCEPT_UNVERIFIED", verdict, f" Judge: INSUFFICIENT ({said}). The changes stand, unjudged."
 
-    def _unmeasured(self, sound: Optional[bool]) -> tuple[str, ...]:
+    @staticmethod
+    def _check_verdict_shape(verdict, notes: list[str]) -> None:
+        """Say so (never crash) when a Judge's verdict names no judge or carries fields Warden does not know."""
+        if not isinstance(getattr(verdict, "judge", None), str) or not verdict.judge.strip():
+            notes.append("The Judge's verdict did not name the judge, so it is recorded as unnamed.")
+        known = {"decision", "reasons", "judge"}
+        try:
+            extra = sorted(set(vars(verdict)) - known)
+        except TypeError:
+            extra = []
+        if extra:
+            notes.append(f"The Judge's verdict carried fields Warden does not know ({', '.join(map(str, extra))[:80]}); "
+                         "they were ignored.")
+
+    def _unmeasured(self, sound: Optional[bool], never_ran: bool = False) -> tuple[str, ...]:
+        """Checks that did not run or could not be read. `never_ran`: the run ended before the
+        suite was measured, so the suite counts as unmeasured too."""
         out = []
         if self._assay_state is not True:
             out.append("assay")
-        if self.ghost_tools_root is None:
+        if self.ghost_tools_root is None or "ghost" in self._down:
             out.append("ghost")
-        if self.swizzle_root is None or sound is False:
+        if self.swizzle_root is None or sound is False or "swizzle" in self._down:
             out.append("swizzle")
-        if not self.run_tests:
+        if not self.run_tests or "suite" in self._down or (never_ran and not self._suite_ran):
             out.append("suite")
         if self.judge is None:
             out.append("judge")
@@ -321,7 +358,7 @@ class TagTeam:
 
         def stop(decision: str, why: str, cycles=(), converged=False, current=None,
                  finish=None, finished=False) -> TagTeamResult:
-            missing = self._unmeasured(sound)
+            missing = self._unmeasured(sound, never_ran=decision in {"INCONCLUSIVE", "REFUSED"})
             candidate = decision == "ACCEPT"
             gaps = tuple(m for m in missing if m != "judge")
             if candidate and missing:
@@ -341,7 +378,7 @@ class TagTeam:
                 reobserved=reobserved, cycles=tuple(cycles),
                 converged=converged, decision=decision, notes=tuple(notes + [why]),
                 finish=finish, finished=finished, swizzle_sound=sound, unmeasured=missing,
-                verdict=verdict)
+                verdict=verdict, reason=why.strip())
 
         if self.drafter is None:
             return stop("INCONCLUSIVE", "No drafter. Tag team observed only; nothing can be proposed.")
@@ -360,6 +397,7 @@ class TagTeam:
         cycles: list[Cycle] = self._trail
         converged = False
         seen: set[str] = set()
+        out_of_scope: set[str] = set()
         #: Findings whose removal failed a test (`declined`) are not offered to the Drafter again.
         for number in range(1, self.max_cycles + 1):
             baseline = _fingerprint(target)
@@ -370,10 +408,27 @@ class TagTeam:
                 cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
                 converged = True
                 break
+            if _changes_nothing(target, proposal):
+                cycles.append(Cycle(number, len(observed), None, False, "NOTHING_TO_PROPOSE"))
+                notes.append(f"Cycle {number}: the Drafter's proposal would change nothing, so it was dropped "
+                             "and counted as nothing to propose.")
+                converged = True
+                break
             key = _edits_key(proposal)
             bad = violation(target, proposal, authorization)
             if bad:
                 kind, why = bad
+                if kind == "scope" and not proposal.known_defects:
+                    # Out of the grant's scope and citing no defect: nothing was written, so this is a
+                    # declined proposal. The same one again ends the run.
+                    if key in out_of_scope:
+                        cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
+                        return stop("NOT_CONVERGED", f"Cycle {number}: the Drafter repeated a proposal that was "
+                                    "already declined as out of scope. Stopped.", cycles)
+                    out_of_scope.add(key)
+                    cycles.append(Cycle(number, len(observed), proposal, False, "DECLINED"))
+                    notes.append(f"Cycle {number}: change declined, nothing was written. {why}.")
+                    continue
                 if kind == "escape" or not proposal.known_defects:
                     cycles.append(Cycle(number, len(observed), proposal, False, "REFUSED"))
                     return stop("REJECT", f"Cycle {number}: {why}. Nothing was written.", cycles)
@@ -550,6 +605,7 @@ class TagTeam:
             return None
         sound, summary = swizzle_proofs_hold(swizzle_root=self.swizzle_root, python=python)
         notes.append(summary)
+        self._sound = sound
         return sound
 
     def _grade(self, python: str, notes: list[str]) -> None:
@@ -582,7 +638,13 @@ class TagTeam:
         """Ghost's findings. Ghost reports only, so the tree must not change while it runs."""
         try:
             with watch(target, "Ghost Tools"):
-                return ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python)
+                found = ghost_scan(target, ghost_tools_root=self.ghost_tools_root, python=python,
+                                   ghost_timeout=self.ghost_timeout)
+            blind = getattr(found, "blind", None)
+            if blind:
+                self._down.add("ghost")
+                self._notes.append(f"{blind}. Ghost is counted as not measured.")
+            return found
         except SeatBrokeCharter:
             raise
         except Exception as err:  # noqa: BLE001 - any failure to see is UNKNOWN, not "no findings"
@@ -596,6 +658,7 @@ class TagTeam:
                 notes.append("Rule 7 NOT RUN: run_tests=False. Behavior preservation is unmeasured.")
             return None
         source_before = _source_hash(target)
+        self._suite_ran = True
         result = run_suite(target, python)
         notes.append(f"Rule 7 suite {when}: {result.describe()}.")
         if _source_hash(target) != source_before:
@@ -659,7 +722,39 @@ def _expect(value, seat: str):
     return value
 
 
+def _changes_nothing(target: Path, proposal: Transformation) -> bool:
+    """True when every edit would leave its file exactly as it is."""
+    try:
+        for edit in proposal.edits:
+            path = Path(target) / edit.path
+            if edit.kind == "delete" or not path.is_file():
+                return False
+            current = textio.read_text(path, edit.path)
+            if edit.kind == "write":
+                same = _lf(edit.new) == _lf(current)
+            elif edit.kind == "replace":
+                same = _lf(edit.old) == _lf(edit.new)
+            else:
+                same = False
+            if not same:
+                return False
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _lf(text: str) -> str:
+    return text.replace("\r\n", "\n")
+
+
 def _defects(findings) -> tuple[Defect, ...]:
+    for f in findings:
+        if not isinstance(f, Mapping):
+            raise GhostUnavailable("Ghost's findings could not be read (an item was not a record). "
+                                   "Observation is UNKNOWN; nothing further was attempted.")
+        if f.get("id") is not None and not isinstance(f.get("id"), str):
+            raise GhostUnavailable("Ghost's findings could not be read (a finding's id was not text). "
+                                   "Observation is UNKNOWN; nothing further was attempted.")
     try:
         return defects_from_ghost(findings)
     except (AttributeError, TypeError, ValueError) as err:

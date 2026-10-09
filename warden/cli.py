@@ -16,11 +16,43 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import CONTRACT, __version__
 from .authorization import Unauthorized, grant
 from . import audit as audit_file, textio
 from .ghost import load_findings, scan as ghost_scan
 from .tagteam import TagTeam
+
+
+#: What `warden tagteam` exits with, by decision. Anything not listed here exits 1, never 0.
+EXIT_CODES = {
+    "ACCEPT": 0,
+    "REJECT": 1,
+    "JUDGE_REJECTED": 1,
+    "NOT_CONVERGED": 1,
+    "FINISH_REJECTED": 1,
+    "USAGE_ERROR": 2,
+    "SEAT_NOT_LOADED": 2,
+    "ACCEPT_UNVERIFIED": 3,
+    "ERROR": 4,
+    "REFUSED": 5,
+    "INCONCLUSIVE": 6,
+}
+
+EXIT_CODE_HELP = """\
+exit codes (only 0 means the change was accepted):
+  0  ACCEPT. Measured, judged, and standing.
+  1  REJECT, JUDGE_REJECTED, NOT_CONVERGED, FINISH_REJECTED, or any other rejection.
+  2  usage error, a seat could not be loaded, or SWIZZLE's own proofs are unsound. Nothing was written.
+  3  ACCEPT_UNVERIFIED. Changes stand but a check did not run or the Judge could not decide.
+  4  ERROR. A seat failed or gave the wrong kind of answer. Nothing was approved.
+  5  REFUSED. No human authorization. A proposal was shown; nothing was written.
+  6  INCONCLUSIVE. A needed measurement could not be made (Ghost down, a red suite from the
+     start, an unusable ASSAY key). Nothing was written.
+The command always prints valid JSON on stdout; `reason` says why in one sentence."""
+
+
+class ContractMismatch(ValueError):
+    """A seat was written for a different version of Warden's shapes."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -28,7 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--version", action="version", version=f"warden {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_t = sub.add_parser("tagteam", help="loop: observe → propose → apply → re-inspect, until converged; then finish once")
+    p_t = sub.add_parser("tagteam", help="loop: observe → propose → apply → re-inspect, until converged; then finish once",
+                         epilog=EXIT_CODE_HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
     p_t.add_argument("path", type=Path)
     p_t.add_argument("--ghost-root", type=Path, default=None)
     p_t.add_argument("--drafter", default=None, metavar="MODULE:FACTORY",
@@ -39,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     p_t.add_argument("--finisher", default=None, metavar="MODULE:FACTORY",
                      help="after the loop, once: beautifies and writes the final README")
     p_t.add_argument("--max-cycles", type=int, default=10)
+    p_t.add_argument("--ghost-timeout", type=float, default=600,
+                     help="seconds one Ghost scan may take; longer counts as Ghost being down (default 600)")
     p_t.add_argument("--swizzle-root", type=Path, default=None,
                      help="SWIZZLE checkout; its proofs must hold before anything is ACCEPTed")
     p_t.add_argument("--assay-root", type=Path, default=None,
@@ -67,13 +102,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             return _tagteam(args)
         except Unauthorized as e:
-            _print_json({"decision": "REFUSED", "notes": [str(e)]})
-            print(f"warden: {e}", file=sys.stderr)
-            return 2
+            return _stop("REFUSED", str(e))
         except Exception as e:  # noqa: BLE001 - the CLI always prints valid JSON, never a traceback
-            _print_json({"decision": "ERROR",
-                         "notes": [f"Warden failed with {type(e).__name__}. Nothing was approved."]})
-            return 4
+            return _stop("ERROR", f"Warden failed with {type(e).__name__}. Nothing was approved.")
     return 2
 
 
@@ -81,33 +112,48 @@ def _print_json(payload) -> None:
     print(json.dumps(payload, indent=2))
 
 
+def _stop(decision: str, reason: str, notes: list[str] | None = None) -> int:
+    """End before a run: valid JSON on stdout, the reason on stderr, and the exit code for `decision`."""
+    _print_json({"decision": decision, "reason": reason, "notes": (notes or []) + [reason]})
+    print(f"warden: {reason}", file=sys.stderr)
+    return EXIT_CODES[decision]
+
+
 def _tagteam(args) -> int:
     """Run the loop once and print what happened as JSON."""
+    path = Path(args.path)
+    if not path.is_dir():
+        what = "does not exist" if not path.exists() else "is not a directory"
+        return _stop("USAGE_ERROR", f"The target {str(path)!r} {what}. Nothing was run.")
     findings = list(load_findings(args.from_ghost)) if args.from_ghost else None
     auth = None
     if args.authorize:
+        if not args.reason.strip():
+            return _stop("REFUSED", "a reason is required")
         try:
-            auth = grant(args.authorize, "transform", str(Path(args.path).resolve()),
-                         args.scope, args.reason)
+            auth = grant(args.authorize, "transform", str(path.resolve()), args.scope, args.reason)
         except Unauthorized as e:
-            print(f"warden: {e}", file=sys.stderr)
-            return 2
+            return _stop("REFUSED", str(e))
+    warnings: list[str] = []
     try:
         with contextlib.redirect_stdout(sys.stderr):
-            drafter = _load_seat(args.drafter)
-            finisher = _load_seat(args.finisher)
-            judge = _load_seat(args.judge)
+            drafter = _load_seat(args.drafter, warnings)
+            finisher = _load_seat(args.finisher, warnings)
+            judge = _load_seat(args.judge, warnings)
+    except ContractMismatch as e:
+        return _stop("SEAT_NOT_LOADED", str(e))
     except Exception as e:  # noqa: BLE001 - a seat that will not load is named, never a traceback
-        print(f"warden: cannot load seat: {e}", file=sys.stderr)
-        _print_json({"decision": "ERROR", "notes": [f"A seat could not be loaded ({type(e).__name__})."]})
-        return 2
-    return _run_team(args, auth, findings, drafter, finisher, judge)
+        return _stop("SEAT_NOT_LOADED", f"A seat could not be loaded ({type(e).__name__}: {str(e)[:120]}).")
+    for w in warnings:
+        print(f"warden: warning: {w}", file=sys.stderr)
+    return _run_team(args, auth, findings, drafter, finisher, judge, warnings)
 
 
-def _run_team(args, auth, findings, drafter, finisher, judge) -> int:
+def _run_team(args, auth, findings, drafter, finisher, judge, warnings=()) -> int:
     team = TagTeam(ghost_tools_root=args.ghost_root, swizzle_root=args.swizzle_root,
                    assay_root=args.assay_root, assay_floor=args.assay_floor,
-                   drafter=drafter, finisher=finisher, judge=judge, max_cycles=args.max_cycles)
+                   drafter=drafter, finisher=finisher, judge=judge, max_cycles=args.max_cycles,
+                   ghost_timeout=args.ghost_timeout)
     # A seat that print()s must not corrupt the JSON on stdout.
     with contextlib.redirect_stdout(sys.stderr):
         result = team.run(args.path, authorization=auth, findings=findings)
@@ -118,7 +164,8 @@ def _run_team(args, auth, findings, drafter, finisher, judge) -> int:
                    for c in result.cycles],
         "finished": result.finished,
         "put_back": result.put_back,
-        "notes": list(result.notes),
+        "reason": None if result.decision == "ACCEPT" else (result.reason or (result.notes[-1] if result.notes else "")),
+        "notes": list(result.notes) + list(warnings),
         "observed": [d.identity for d in result.observed],
         "reobserved": [d.identity for d in result.reobserved],
         "swizzle_sound": result.swizzle_sound,
@@ -131,28 +178,53 @@ def _run_team(args, auth, findings, drafter, finisher, judge) -> int:
     if result.swizzle_sound is False:
         print("warden: SWIZZLE's own proofs do not hold; nothing was written.", file=sys.stderr)
         return 2
-    return {"ACCEPT": 0, "INCONCLUSIVE": 0, "REFUSED": 0, "ACCEPT_UNVERIFIED": 3,
-            "ERROR": 4}.get(result.decision, 1)
+    return EXIT_CODES.get(result.decision, 1)
 
 
-def _load_seat(spec):
-    """The seat-filler named as MODULE:FACTORY, built with no arguments; None if not named."""
+def _load_seat(spec, warnings: list[str] | None = None):
+    """The seat-filler named as MODULE:FACTORY, built with no arguments; None if not named.
+
+    A seat may declare `requires_contract`, the version of Warden's shapes it was written for. A
+    different version is refused. A seat that declares nothing runs, with a warning.
+    """
     if not spec:
         return None
     module_name, _, attr = spec.partition(":")
     if not module_name or not attr:
         raise ValueError("expected MODULE:FACTORY")
-    return getattr(importlib.import_module(module_name), attr)()
+    seat = getattr(importlib.import_module(module_name), attr)()
+    wanted = getattr(seat, "requires_contract", None)
+    if wanted is None:
+        if warnings is not None:
+            warnings.append(f"The seat {spec} does not declare requires_contract, so its fit with this Warden "
+                            f"(contract {CONTRACT}) was not checked.")
+    elif not isinstance(wanted, str) or wanted != CONTRACT:
+        raise ContractMismatch(f"The seat {spec} was written for Warden contract {wanted!r} but this Warden "
+                               f"is contract {CONTRACT!r}. Nothing was run.")
+    return seat
 
 
 def _audit(args) -> int:
     """Print the updated audit; write it only under a human grant."""
     root = Path(args.path).resolve()
-    if args.from_ghost:
-        findings = load_findings(args.from_ghost)
-    elif args.ghost_root:
-        findings = ghost_scan(root, ghost_tools_root=args.ghost_root)
-    else:
+    if not root.is_dir():
+        print(f"warden: the target {str(args.path)!r} does not exist or is not a directory.", file=sys.stderr)
+        return 2
+    try:
+        if args.from_ghost:
+            findings = load_findings(args.from_ghost)
+        elif args.ghost_root:
+            findings = ghost_scan(root, ghost_tools_root=args.ghost_root)
+        else:
+            findings = None
+    except Exception as e:  # noqa: BLE001 - an audit that could not read its findings must not look clean
+        print(f"warden: the findings could not be read ({type(e).__name__}: {str(e)[:120]}). "
+              "Nothing was printed or written.", file=sys.stderr)
+        return 2
+    if findings is not None and getattr(findings, "blind", None):
+        print(f"warden: {findings.blind}. Nothing was printed or written.", file=sys.stderr)
+        return 2
+    if findings is None:
         print("warden: audit needs --ghost-root or --from-ghost; an audit of nothing "
               "would read as a clean repository", file=sys.stderr)
         return 2
@@ -166,7 +238,12 @@ def _audit(args) -> int:
     except textio.Undecodable:
         print(f"warden: {path} is not valid UTF-8, so it will not be touched.", file=sys.stderr)
         return 2
-    updated = audit_file.update(current, findings)
+    try:
+        updated = audit_file.update(current, findings)
+    except Exception as e:  # noqa: BLE001 - garbled findings must not produce a half-made audit
+        print(f"warden: the findings could not be used ({type(e).__name__}). Nothing was printed or written.",
+              file=sys.stderr)
+        return 2
     if not args.authorize:
         print(updated)
         return 0
@@ -180,7 +257,11 @@ def _audit(args) -> int:
     except Unauthorized as e:
         print(f"warden: {e}", file=sys.stderr)
         return 2
-    textio.write_text(path, updated)
+    try:
+        textio.write_text(path, updated)
+    except OSError as e:
+        print(f"warden: {path} could not be written ({type(e).__name__}).", file=sys.stderr)
+        return 2
     print(f"wrote {path} (authorized by {auth.actor})")
     return 0
 

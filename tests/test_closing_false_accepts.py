@@ -412,7 +412,9 @@ def test_a_seat_that_crashes_gives_json_and_a_nonzero_exit(tmp_path, monkeypatch
 
 def test_a_seat_that_will_not_load_still_gives_json(tmp_path, monkeypatch, capsys):
     code, out, _ = _cli(tmp_path, monkeypatch, capsys, "raise ImportError('nope')\n")
-    assert code == 2 and json.loads(out.out)["decision"] == "ERROR"
+    # The label is now SEAT_NOT_LOADED (exit 2); ERROR is exit 4 and means a seat failed while running.
+    payload = json.loads(out.out)
+    assert code == 2 and payload["decision"] == "SEAT_NOT_LOADED" and payload["reason"]
 
 
 def test_a_bad_findings_file_gives_json(tmp_path, capsys):
