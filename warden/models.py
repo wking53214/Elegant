@@ -38,6 +38,30 @@ class DefectLifecycle(str, Enum):
     DEFERRED = "deferred"
 
 
+class InvalidDefectTransition(ValueError):
+    """A defect was moved to a state its lifecycle does not allow."""
+
+
+# Only the moves the code makes today. A state with no entry has no allowed
+# next step, so any move out of it is refused.
+VALID_DEFECT_TRANSITIONS: dict[DefectLifecycle, frozenset[DefectLifecycle]] = {
+    DefectLifecycle.PROPOSED: frozenset(
+        {DefectLifecycle.AUTHORIZED, DefectLifecycle.MODIFIED}
+    ),
+    DefectLifecycle.AUTHORIZED: frozenset({DefectLifecycle.MODIFIED}),
+}
+
+
+def _move_defect(defect: Any, target: DefectLifecycle) -> None:
+    allowed = VALID_DEFECT_TRANSITIONS.get(defect.lifecycle, frozenset())
+    if target not in allowed:
+        raise InvalidDefectTransition(
+            f"defect cannot move from {defect.lifecycle.value} "
+            f"to {target.value}"
+        )
+    defect.lifecycle = target
+
+
 class TransformationStatus(str, Enum):
     DRAFT = "draft"
     PROPOSED = "proposed"
@@ -141,7 +165,7 @@ class Transformation:
         self.status = TransformationStatus.AUTHORIZED
         for d in self.known_defects:
             if d.lifecycle == DefectLifecycle.PROPOSED:
-                d.lifecycle = DefectLifecycle.AUTHORIZED
+                _move_defect(d, DefectLifecycle.AUTHORIZED)
         return self
 
     def apply(self, root: Path) -> Mapping[str, Any]:
@@ -188,7 +212,7 @@ class Transformation:
         self.result = f"wrote {len(written)} file(s)"
         for d in self.known_defects:
             if d.lifecycle in {DefectLifecycle.AUTHORIZED, DefectLifecycle.PROPOSED}:
-                d.lifecycle = DefectLifecycle.MODIFIED
+                _move_defect(d, DefectLifecycle.MODIFIED)
         return {"written": written, "status": self.status.value}
 
     def to_dict(self) -> dict[str, Any]:
